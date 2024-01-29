@@ -1,14 +1,15 @@
-import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:time_tracker/models/activity.dart';
+import 'package:time_tracker/models/activity_data.dart';
+import 'package:time_tracker/models/common_timer.dart';
 import 'package:time_tracker/services/storage_service.dart';
 import 'package:time_tracker/ui/widgets/activity_widget.dart';
 import 'package:time_tracker/ui/widgets/timer_display.dart';
-// Другие необходимые импорты...
 
 class MainActivityScreen extends StatefulWidget {
-  const MainActivityScreen({super.key});
+  const MainActivityScreen({Key? key}) : super(key: key);
 
   @override
   _MainActivityScreenState createState() => _MainActivityScreenState();
@@ -17,88 +18,112 @@ class MainActivityScreen extends StatefulWidget {
 class _MainActivityScreenState extends State<MainActivityScreen> {
   List<Activity> activities = [];
   int? selectedActivityIndex;
-  Timer? _timer;
-  final StorageService _storageService = StorageService();
-  Duration _totalElapsedTime = Duration.zero;
-  Timer? _totalTimer;
-  bool isTimerRunning = false;
+  late CommonTimer _commonTimer;
+  final StorageService _storageService = StorageService(); // Инстанс StorageService
 
   @override
   void initState() {
     super.initState();
-    _loadActivities();
+    _initializeTimer();
+    _loadActivities(); // Загружаем активности через StorageService
+  }
+
+  void _initializeTimer() {
+    _commonTimer = CommonTimer();
   }
 
   Future<void> _loadActivities() async {
-    try {
-      List<Activity> loadedActivities = await _storageService.loadActivities();
-      setState(() {
-        activities = loadedActivities;
-      });
-    } catch (e) {
-      // Обработка ошибок, например, показ сообщения об ошибке
-      print('Ошибка загрузки данных: $e');
-    }
+  var activitiesData = await _storageService.getAllActivities();
+  List<Activity> loadedActivities = [];
+
+  for (ActivityData data in activitiesData) {
+    loadedActivities.add(Activity(
+      id: data.id,
+      name: data.name,
+      color: Color(data.colorValue),
+      storageService: _storageService
+    ));
   }
 
-  Color _generateRandomLightColor() {
-    Random random = Random();
-    // Генерация светлых цветов (минимум 150 из 255 для каждого канала RGB)
-    return Color.fromRGBO(
-      150 + random.nextInt(106), // от 150 до 255
-      150 + random.nextInt(106),
-      150 + random.nextInt(106),
-      1,
+  setState(() {
+    activities = loadedActivities;
+  });
+}
+
+
+  void _addActivity(String name) async {
+    int id = DateTime.now().millisecondsSinceEpoch + Random().nextInt(9999);
+    Color color = _generateRandomLightColor();
+    Activity newActivity = Activity(
+      id: id,
+      name: name,
+      color: color,
+      storageService: _storageService
     );
-  }
 
-  void _addActivity(String name) {
-    print('ADD');
-    Color randomColor =
-        _generateRandomLightColor(); // Генерация случайного цвета
+    await _storageService.setActivity(newActivity.toData()); // Преобразование в ActivityData для сохранения
     setState(() {
-      activities.add(Activity(name: name, color: randomColor));
+      activities.add(newActivity);
     });
-    _storageService.saveActivities(activities); // Сохранение после добавления
   }
 
-  void _deleteActivity(int index) {
-    activities[index].stopTimer();
+  void _selectActivity(int index) {
+    setState(() {
+      selectedActivityIndex = index;
+      activities[index].startOrResumeTimer();
+      // Обновление активности в StorageService, если это необходимо
+    });
+  }
 
+  void _deleteActivity(int index) async {
+    await _storageService.deleteActivity(activities[index].id); // Удаление активности
     setState(() {
       activities.removeAt(index);
       if (selectedActivityIndex == index) {
         selectedActivityIndex = null;
-      } else if (index < selectedActivityIndex!) {
-        selectedActivityIndex = selectedActivityIndex! - 1;
       }
     });
-    _storageService.saveActivities(activities);
   }
 
-  void _selectActivity(int index) {
-    // Запуск общего таймера, если он еще не запущен
-    if (!isTimerRunning) {
-      _startTotalTimer();
-    }
-
-    // Останавливаем таймер предыдущей выбранной активности, если таковая имеется
-    if (selectedActivityIndex != null) {
-      activities[selectedActivityIndex!].stopTimer();
-    }
-
-    // Выбор новой активности и запуск ее таймера
-    setState(() {
-      selectedActivityIndex = index;
-    });
-    activities[index].startTimer();
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Time Tracker'),
+      ),
+      body: Column(
+        children: [
+          TimerDisplay(commonTimer: _commonTimer),
+          Expanded(
+            child: ListView.builder(
+              itemCount: activities.length,
+              itemBuilder: (context, index) {
+                return ActivityWidget(
+                  activity: activities[index],
+                  activityStatusStream: activities[index].timeSpentStream,
+                  onSelect: () => _selectActivity(index),
+                  onDelete: () => _deleteActivity(index),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddActivityDialog(),
+        child: const Icon(Icons.add),
+      ),
+    );
   }
 
-  void _updateActivityPercentages() {
-    for (var activity in activities) {
-      activity.calculatePercentage(_totalElapsedTime);
-    }
-    setState(() {});
+  Color _generateRandomLightColor() {
+    Random random = Random();
+    return Color.fromRGBO(
+      150 + random.nextInt(106),
+      150 + random.nextInt(106),
+      150 + random.nextInt(106),
+      1,
+    );
   }
 
   void _showAddActivityDialog() {
@@ -134,98 +159,9 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
     );
   }
 
-  void _startTotalTimer() {
-    _totalTimer?.cancel();
-    _totalElapsedTime = Duration.zero;
-    _totalTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _totalElapsedTime += const Duration(seconds: 1);
-        isTimerRunning = true;
-      });
-    });
-  }
-
-  void _stopTotalTimer() {
-    _totalTimer?.cancel();
-    setState(() {
-      _updateActivityPercentages(); // Обновление процентного времени активностей
-      isTimerRunning = false;
-      _totalElapsedTime = Duration.zero;
-
-      // Сортировка активностей по убыванию времени
-      activities.sort((a, b) => b.timeSpent.compareTo(a.timeSpent));
-    });
-  }
-
-  void _resetTimers() {
-    for (var activity in activities) {
-      activity.stopTimer();
-      activity.timeSpent = Duration.zero;
-    }
-
-    _stopTotalTimer(); // Останавливаем и сбрасываем общий таймер
-    _totalElapsedTime = Duration.zero;
-
-    setState(() {
-      selectedActivityIndex = null; // Сбрасываем выбранную активность
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Time Tracker'),
-        actions: [
-          if (!isTimerRunning)
-            IconButton(
-              icon: const Icon(Icons.play_arrow),
-              onPressed: _startTotalTimer,
-            ),
-          if (isTimerRunning)
-            IconButton(
-              icon: const Icon(Icons.stop),
-              onPressed: _stopTotalTimer,
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          TimerDisplay(
-            duration: _totalElapsedTime,
-            isTimerRunning: isTimerRunning,
-            onStop: _stopTotalTimer,
-            onReset: _resetTimers, // Добавление колбэка для сброса
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: activities.length,
-              itemBuilder: (context, index) {
-                return ActivityWidget(
-                  activity: activities[index],
-                  timerDuration: activities[index].timeSpent,
-                  percentage: activities[index].percentage,
-                  onSelect: () => _selectActivity(index),
-                  onDelete: () => _deleteActivity(index),
-                  isSelected: selectedActivityIndex ==
-                      index, // Проверка, выбрана ли активность
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddActivityDialog,
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
   @override
   void dispose() {
-    _timer?.cancel();
-    _totalTimer?.cancel();
+    // _storageService.saveTimerState(_totalElapsedTime);
     super.dispose();
   }
 }

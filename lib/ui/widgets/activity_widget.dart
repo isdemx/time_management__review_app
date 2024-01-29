@@ -3,51 +3,51 @@ import 'package:time_tracker/models/activity.dart';
 
 class ActivityWidget extends StatelessWidget {
   final Activity activity;
-  final Duration timerDuration;
+  final Stream<ActivityStatus> activityStatusStream;
   final VoidCallback onSelect;
   final VoidCallback onDelete;
-  final double percentage;
-  final bool isSelected;
 
   const ActivityWidget({
-    super.key,
+    Key? key,
     required this.activity,
-    required this.timerDuration,
+    required this.activityStatusStream,
     required this.onSelect,
     required this.onDelete,
-    required this.percentage,
-    this.isSelected = false,
-  });
+  }) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onSelect,
-      child: Container(
-        padding: const EdgeInsets.all(8.0),
-        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-        decoration: BoxDecoration(
-          color: isSelected ? activity.color.withOpacity(0.5) : activity.color,
-          borderRadius: BorderRadius.circular(8.0),
-          border: isSelected
-              ? Border.all(
-                  color: Colors.black,
-                  width: 2.0) // Жирный бордер для выбранной активности
-              : null,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Text(activity.name),
-            const Spacer(),
-            Text('${percentage.toStringAsFixed(2)}%'),
-            Text(_formatDuration(timerDuration)),
-            IconButton(
-              icon: Icon(Icons.delete),
-              onPressed: onDelete,
+    return StreamBuilder<ActivityStatus>(
+      stream: activityStatusStream,
+      builder: (context, snapshot) {
+        final status = snapshot.data ?? ActivityStatus(timeSpent: Duration.zero, isActive: false);
+        return InkWell(
+          onTap: onSelect,
+          child: Container(
+            padding: const EdgeInsets.all(8.0),
+            margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+            decoration: BoxDecoration(
+              color: activity.color.withOpacity(status.isActive ? 0.5 : 1),
+              borderRadius: BorderRadius.circular(8.0),
+              border: status.isActive
+                  ? Border.all(color: Colors.black, width: 2.0)
+                  : null,
             ),
-          ],
-        ),
-      ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                Text(activity.name),
+                const Spacer(),
+                Text(_formatDuration(status.timeSpent)),
+                IconButton(
+                  icon: const Icon(Icons.delete),
+                  onPressed: onDelete,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
