@@ -20,20 +20,20 @@ class ActivityData {
       'id': id,
       'name': name,
       'colorValue': colorValue,
-      'accumulatedSeconds': accumulatedSeconds,
-      'lastStartedTime': lastStartedTime,
+      'accumulatedSeconds': accumulatedSeconds.inSeconds,
+      'lastStartedTime': lastStartedTime?.toIso8601String(),
       'isActive': isActive,
     };
   }
 
   factory ActivityData.fromJson(Map<String, dynamic> json) {
-    return ActivityData(
-      id: json['id'],
-      name: json['name'],
-      colorValue: json['colorValue'],
-      accumulatedSeconds: json['accumulatedSeconds'],
-      lastStartedTime: json['lastStartedTime'],
-      isActive: json['isActive'],
-    );
-  }
+  return ActivityData(
+    id: json['id'],
+    name: json['name'],
+    colorValue: json['colorValue'],
+    accumulatedSeconds: Duration(seconds: json['accumulatedSeconds']),
+    lastStartedTime: json['lastStartedTime'] != null ? DateTime.parse(json['lastStartedTime']) : null,
+    isActive: json['isActive'],
+  );
+}
 }

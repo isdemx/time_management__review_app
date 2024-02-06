@@ -17,51 +17,59 @@ class MainActivityScreen extends StatefulWidget {
 
 class _MainActivityScreenState extends State<MainActivityScreen> {
   List<Activity> activities = [];
-  int? selectedActivityIndex;
+  int selectedActivityIndex = -1;
   late CommonTimer _commonTimer;
-  final StorageService _storageService = StorageService(); // Инстанс StorageService
+  final StorageService _storageService =
+      StorageService(); // Инстанс StorageService
 
   @override
   void initState() {
     super.initState();
-    _initializeTimer();
     _loadActivities(); // Загружаем активности через StorageService
   }
 
-  void _initializeTimer() {
+  Future<void> _initializeTimer() async {
     _commonTimer = CommonTimer();
+    await _commonTimer.initialize();
   }
 
   Future<void> _loadActivities() async {
-  var activitiesData = await _storageService.getAllActivities();
-  List<Activity> loadedActivities = [];
+    await _initializeTimer();
+    var activitiesData = await _storageService.getAllActivities();
+    List<Activity> loadedActivities = [];
 
-  for (ActivityData data in activitiesData) {
-    loadedActivities.add(Activity(
-      id: data.id,
-      name: data.name,
-      color: Color(data.colorValue),
-      storageService: _storageService
-    ));
+    for (ActivityData data in activitiesData) {
+      loadedActivities.add(Activity(
+          isActive: data.isActive,
+          id: data.id,
+          name: data.name,
+          color: Color(data.colorValue)));
+    }
+    print('activities ${loadedActivities.toString()}');
+    selectedActivityIndex = loadedActivities.indexWhere(
+      (activity) {
+        print('activity.isActive ${activity.isActive}');
+        return activity.isActive;
+      },
+    );
+    print('selectedActivityIndex on load $selectedActivityIndex');
+
+    if (selectedActivityIndex != -1) {
+      print('start or resume timer');
+      _commonTimer.startOrResume();
+    }
+    setState(() {
+      activities = loadedActivities;
+    });
   }
-
-  setState(() {
-    activities = loadedActivities;
-  });
-}
-
 
   void _addActivity(String name) async {
     int id = DateTime.now().millisecondsSinceEpoch + Random().nextInt(9999);
     Color color = _generateRandomLightColor();
-    Activity newActivity = Activity(
-      id: id,
-      name: name,
-      color: color,
-      storageService: _storageService
-    );
+    Activity newActivity = Activity(id: id, name: name, color: color);
 
-    await _storageService.setActivity(newActivity.toData()); // Преобразование в ActivityData для сохранения
+    await _storageService.setActivity(
+        newActivity.toData()); // Преобразование в ActivityData для сохранения
     setState(() {
       activities.add(newActivity);
     });
@@ -69,20 +77,43 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
 
   void _selectActivity(int index) {
     setState(() {
-      selectedActivityIndex = index;
+      print('selectedActivityIndex $selectedActivityIndex');
+      if (selectedActivityIndex != -1) {
+        var activeActivity = activities[selectedActivityIndex!];
+        print('activeActivity ${activeActivity.name}');
+        print('selectedActivity ${activities[index].name}');
+
+        activeActivity.pauseTimer();
+      }
       activities[index].startOrResumeTimer();
-      // Обновление активности в StorageService, если это необходимо
+      _commonTimer.startOrResume();
+      selectedActivityIndex = index;
     });
   }
 
   void _deleteActivity(int index) async {
-    await _storageService.deleteActivity(activities[index].id); // Удаление активности
+    await _storageService
+        .deleteActivity(activities[index].id); // Удаление активности
     setState(() {
       activities.removeAt(index);
       if (selectedActivityIndex == index) {
-        selectedActivityIndex = null;
+        selectedActivityIndex = -1;
       }
     });
+  }
+
+  void pauseTimer() {
+    _commonTimer.pause();
+    if (selectedActivityIndex != -1) {
+      activities[selectedActivityIndex].pauseTimer();
+    }
+  }
+
+  void resetTimer() {
+    for (var activity in activities) {
+      activity.resetTimer();
+    }
+    _commonTimer.reset();
   }
 
   @override
@@ -93,7 +124,11 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
       ),
       body: Column(
         children: [
-          TimerDisplay(commonTimer: _commonTimer),
+          TimerDisplay(
+            commonTimer: _commonTimer,
+            onPause: () => pauseTimer(),
+            onReset: () => resetTimer(),
+          ),
           Expanded(
             child: ListView.builder(
               itemCount: activities.length,

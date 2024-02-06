@@ -3,8 +3,15 @@ import 'package:time_tracker/models/common_timer.dart';
 
 class TimerDisplay extends StatefulWidget {
   final CommonTimer commonTimer;
+  final VoidCallback onPause;
+  final VoidCallback onReset;
 
-  const TimerDisplay({Key? key, required this.commonTimer}) : super(key: key);
+  const TimerDisplay(
+      {Key? key,
+      required this.commonTimer,
+      required this.onPause,
+      required this.onReset})
+      : super(key: key);
 
   @override
   _TimerDisplayState createState() => _TimerDisplayState();
@@ -51,13 +58,13 @@ class _TimerDisplayState extends State<TimerDisplay> {
           if (_isRunning)
             IconButton(
               icon: const Icon(Icons.stop),
-              onPressed: widget.commonTimer.pause,
+              onPressed: widget.onPause,
               color: Colors.red,
             ),
           if (!_isRunning)
             IconButton(
               icon: const Icon(Icons.reset_tv),
-              onPressed: widget.commonTimer.reset,
+              onPressed: widget.onReset,
               color: Colors.orange,
             ),
         ],

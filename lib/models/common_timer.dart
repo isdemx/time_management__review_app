@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TimerData {
@@ -18,13 +19,14 @@ class CommonTimer {
   final _durationStreamController = StreamController<TimerData>.broadcast();
 
   CommonTimer() {
-    _initialize();
+    // _initialize();
   }
 
   Stream<TimerData> get durationStream => _durationStreamController.stream;
 
-  void _initialize() async {
+  Future<void> initialize() async {
     _prefs = await SharedPreferences.getInstance();
+    print('INIT TIMER ${_prefs.getString(_lastStartTimeKey)}');
     _lastStartTime = _prefs.getString(_lastStartTimeKey) != null
         ? DateTime.tryParse(_prefs.getString(_lastStartTimeKey) ?? '')
         : null;
@@ -43,6 +45,8 @@ class CommonTimer {
   }
 
   void startOrResume() async {
+    print('_prefs ${_prefs.getString(_lastStartTimeKey)}');
+    Fluttertoast.showToast(msg: 'Start');
     if (_lastStartTime == null) {
       _lastStartTime = DateTime.now();
       await _prefs.setString(
@@ -73,6 +77,8 @@ class CommonTimer {
 
     await _prefs.remove(_lastStartTimeKey);
     await _prefs.remove(_accumulatedTimeKey);
+    _durationStreamController.sink
+        .add(TimerData(duration: const Duration(seconds: 0), isRunning: false));
   }
 
   void dispose() {
