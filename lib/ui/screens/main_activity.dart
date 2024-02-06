@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:time_tracker/models/activity.dart';
-import 'package:time_tracker/models/activity_data.dart';
 import 'package:time_tracker/models/common_timer.dart';
 import 'package:time_tracker/services/storage_service.dart';
 import 'package:time_tracker/ui/widgets/activity_widget.dart';
@@ -17,7 +16,7 @@ class MainActivityScreen extends StatefulWidget {
 
 class _MainActivityScreenState extends State<MainActivityScreen> {
   List<Activity> activities = [];
-  int selectedActivityIndex = -1;
+  int? selectedActivityIndex;
   late CommonTimer _commonTimer;
   final StorageService _storageService =
       StorageService(); // Инстанс StorageService
@@ -25,7 +24,7 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
   @override
   void initState() {
     super.initState();
-    _loadActivities(); // Загружаем активности через StorageService
+    _load(); // Загружаем активности через StorageService
   }
 
   Future<void> _initializeTimer() async {
@@ -33,29 +32,26 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
     await _commonTimer.initialize();
   }
 
-  Future<void> _loadActivities() async {
+  Future<void> _load() async {
+    await _storageService.initialize();  
     await _initializeTimer();
-    var activitiesData = await _storageService.getAllActivities();
+    var activitiesData = _storageService.getAllActivities();
     List<Activity> loadedActivities = [];
 
-    for (ActivityData data in activitiesData) {
+    for (int i = 0; i < activitiesData.length; i++) {
       loadedActivities.add(Activity(
-          isActive: data.isActive,
-          id: data.id,
-          name: data.name,
-          color: Color(data.colorValue)));
+          isActive: activitiesData[i].isActive,
+          id: activitiesData[i].id,
+          name: activitiesData[i].name,
+          color: Color(activitiesData[i].colorValue)));
+      if (activitiesData[i].isActive) {
+        selectedActivityIndex = i;
+      }
     }
     print('activities ${loadedActivities.toString()}');
-    selectedActivityIndex = loadedActivities.indexWhere(
-      (activity) {
-        print('activity.isActive ${activity.isActive}');
-        return activity.isActive;
-      },
-    );
     print('selectedActivityIndex on load $selectedActivityIndex');
 
-    if (selectedActivityIndex != -1) {
-      print('start or resume timer');
+    if (selectedActivityIndex != null) {
       _commonTimer.startOrResume();
     }
     setState(() {
@@ -78,7 +74,7 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
   void _selectActivity(int index) {
     setState(() {
       print('selectedActivityIndex $selectedActivityIndex');
-      if (selectedActivityIndex != -1) {
+      if (selectedActivityIndex != null) {
         var activeActivity = activities[selectedActivityIndex!];
         print('activeActivity ${activeActivity.name}');
         print('selectedActivity ${activities[index].name}');
@@ -97,15 +93,15 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
     setState(() {
       activities.removeAt(index);
       if (selectedActivityIndex == index) {
-        selectedActivityIndex = -1;
+        selectedActivityIndex = null;
       }
     });
   }
 
   void pauseTimer() {
     _commonTimer.pause();
-    if (selectedActivityIndex != -1) {
-      activities[selectedActivityIndex].pauseTimer();
+    if (selectedActivityIndex != null) {
+      activities[selectedActivityIndex!].pauseTimer();
     }
   }
 
@@ -120,7 +116,7 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Time Tracker'),
+        title: const Text('Time Management Reviewer'),
       ),
       body: Column(
         children: [

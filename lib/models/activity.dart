@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:time_tracker/models/activity_data.dart';
 import 'package:time_tracker/services/storage_service.dart';
 
@@ -42,9 +43,10 @@ class Activity {
   Stream<ActivityStatus> get timeSpentStream =>
       _timeSpentStreamController.stream;
 
-  void _initialize() async {
+  void _initialize() {
     // Получаем данные из StorageService
-    var activityData = await _storageService.getActivity(id);
+    var activityData = _storageService.getActivity(id);
+    // Fluttertoast.showToast(msg: 'initialize $name');
     print(
         'activityData accumulatedSeconds inSeconds ${activityData?.accumulatedSeconds.inSeconds}');
     if (activityData != null) {
@@ -54,7 +56,7 @@ class Activity {
           Duration(seconds: activityData.accumulatedSeconds.inSeconds);
       isActive = activityData.isActive;
       print('isActive ${isActive}');
-      Future.delayed(const Duration(microseconds: 1), () {
+      Future.delayed(const Duration(milliseconds: 100), () {
         _updateTimeSpent(isActive);
         if (isActive) {
           startOrResumeTimer();

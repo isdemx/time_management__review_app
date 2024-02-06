@@ -3,9 +3,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:time_tracker/models/activity_data.dart';
 
 class StorageService {
+  static final StorageService _instance = StorageService._internal();
+  factory StorageService() {
+    return _instance;
+  }
+
+  StorageService._internal();
+
+  late final prefs;
+
+  Future<void> initialize() async {
+    prefs = await SharedPreferences.getInstance();
+  }
+
   // Получение всех активностей из хранилища
-  Future<List<ActivityData>> getAllActivities() async {
-    final prefs = await SharedPreferences.getInstance();
+  List<ActivityData> getAllActivities() {
     final keys = prefs.getKeys();
     final List<ActivityData> activities = [];
 
@@ -21,8 +33,7 @@ class StorageService {
   }
 
   // Получение одной активности
-  Future<ActivityData?> getActivity(int id) async {
-    final prefs = await SharedPreferences.getInstance();
+  ActivityData? getActivity(int id) {
     String? activityJson = prefs.getString('activity_$id');
     if (activityJson != null) {
       return ActivityData.fromJson(json.decode(activityJson));
@@ -32,14 +43,13 @@ class StorageService {
 
   // Сохранение новой активности
   Future<void> setActivity(ActivityData activity) async {
-    final prefs = await SharedPreferences.getInstance();
     String activityJson = json.encode(activity.toJson());
+    print('prefs $prefs');
     await prefs.setString('activity_${activity.id}', activityJson);
   }
 
   // Обновление времени активности
   Future<void> updateActivityTime(String id) async {
-    final prefs = await SharedPreferences.getInstance();
     String? activityJson = prefs.getString('activity_$id');
     if (activityJson != null) {
       var activity = ActivityData.fromJson(json.decode(activityJson));
@@ -61,7 +71,6 @@ class StorageService {
   }
 
   Future<void> deleteActivity(int id) async {
-    final prefs = await SharedPreferences.getInstance();
     await prefs.remove('activity_$id');
   }
 }
