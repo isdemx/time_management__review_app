@@ -38,12 +38,18 @@ class CommonTimer {
     final currentSeconds = _lastStartTime == null
         ? 0
         : DateTime.now().difference(_lastStartTime ?? DateTime.now()).inSeconds;
+        print('_lastStartTime ${_lastStartTime}');
+        print('_accumulatedTime.inSeconds ${_accumulatedTime.inSeconds}');
+        print('currentSeconds ${currentSeconds}');
+        print('get duration ${Duration(seconds: _accumulatedTime.inSeconds + currentSeconds)}');
     return Duration(seconds: _accumulatedTime.inSeconds + currentSeconds);
   }
 
   void _setNewTimerState(bool isRunning) {
+    var duration = getcurrentDuration();
+    print('common duration: $duration');
     _durationStreamController.sink
-        .add(TimerData(duration: getcurrentDuration(), isRunning: isRunning));
+        .add(TimerData(duration: duration, isRunning: isRunning));
   }
 
   void startOrResume() async {

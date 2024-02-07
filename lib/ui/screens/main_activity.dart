@@ -105,8 +105,8 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
     });
   }
 
-  void pauseTimer() {
-    _commonTimer.pause();
+  Future<void> pauseTimer() async {
+    await _commonTimer.pause();
     if (selectedActivityIndex != null) {
       activities[selectedActivityIndex!].pauseTimer(context);
     }

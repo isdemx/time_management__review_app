@@ -132,6 +132,7 @@ class Activity {
   }
 
   emitPercent(Duration totalDuration) {
+    print('PERCENTS ${_currentSeconds.inSeconds} - ${totalDuration.inSeconds}');
     double percents = (_currentSeconds.inSeconds / totalDuration.inSeconds) * 100;
     _timeSpentStreamController.sink.add(ActivityStatus(
         timeSpent: _accumulatedTime, isActive: isActive, percents: percents));
