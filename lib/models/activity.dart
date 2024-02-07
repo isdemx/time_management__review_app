@@ -8,9 +8,10 @@ import 'package:time_tracker/services/storage_service.dart';
 class ActivityStatus {
   final Duration timeSpent;
   final bool isActive;
-  final int percents = 0;
+  final double? percents;
 
-  ActivityStatus({required this.timeSpent, required this.isActive});
+  ActivityStatus(
+      {required this.timeSpent, required this.isActive, this.percents});
 
   Map<String, dynamic> toJson() {
     return {
@@ -65,14 +66,17 @@ class Activity {
     }
   }
 
-  void _updateTimeSpent(bool isActive) {
+  Duration get _currentSeconds {
     final currentSeconds = _lastStartedTime == null
         ? 0
         : DateTime.now()
             .difference(_lastStartedTime ?? DateTime.now())
             .inSeconds;
-    final newTime =
-        Duration(seconds: _accumulatedTime.inSeconds + currentSeconds);
+    return Duration(seconds: _accumulatedTime.inSeconds + currentSeconds);
+  }
+
+  void _updateTimeSpent(bool isActive) {
+    final newTime = _currentSeconds;
     _timeSpentStreamController.sink
         .add(ActivityStatus(timeSpent: newTime, isActive: isActive));
   }
@@ -97,7 +101,6 @@ class Activity {
     _updateTimeSpent(false);
     final activityCubit = context.read<ActivityCubit>();
     activityCubit.clearActive();
-    
   }
 
   void resetTimer() {
@@ -126,6 +129,17 @@ class Activity {
     print(
         '_updateActivityData ${activityData.name}, isActive: $isActiveActivity');
     await _storageService.setActivity(activityData);
+  }
+
+  emitPercent(Duration totalDuration) {
+    double percents = (_currentSeconds.inSeconds / totalDuration.inSeconds) * 100;
+    _timeSpentStreamController.sink.add(ActivityStatus(
+        timeSpent: _accumulatedTime, isActive: isActive, percents: percents));
+  }
+
+  emitNoPercent() {
+    _timeSpentStreamController.sink.add(ActivityStatus(
+        timeSpent: _accumulatedTime, isActive: isActive, percents: null));
   }
 
   ActivityData toData() {

@@ -76,6 +76,9 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
   }
 
   void _selectActivity(int index) {
+    for (var activity in activities) {
+       activity.emitNoPercent();
+    }
     print('index $index');
     setState(() {
       print('selectedActivityIndex $selectedActivityIndex');
@@ -107,6 +110,10 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
     if (selectedActivityIndex != null) {
       activities[selectedActivityIndex!].pauseTimer(context);
     }
+
+    activities.forEach((activity) {
+      activity.emitPercent(_commonTimer.getcurrentDuration());
+    });
   }
 
   void resetTimer() {

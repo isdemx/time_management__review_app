@@ -34,14 +34,16 @@ class CommonTimer {
         Duration(seconds: _prefs.getInt(_accumulatedTimeKey) ?? 0);
   }
 
-  void _setNewTimerState(bool isRunning) {
+  Duration getcurrentDuration() {
     final currentSeconds = _lastStartTime == null
         ? 0
         : DateTime.now().difference(_lastStartTime ?? DateTime.now()).inSeconds;
-    _durationStreamController.sink.add(TimerData(
-        duration:
-            Duration(seconds: _accumulatedTime.inSeconds + currentSeconds),
-        isRunning: isRunning));
+    return Duration(seconds: _accumulatedTime.inSeconds + currentSeconds);
+  }
+
+  void _setNewTimerState(bool isRunning) {
+    _durationStreamController.sink
+        .add(TimerData(duration: getcurrentDuration(), isRunning: isRunning));
   }
 
   void startOrResume() async {

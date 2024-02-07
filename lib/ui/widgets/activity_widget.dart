@@ -27,7 +27,8 @@ class ActivityWidget extends StatelessWidget {
           stream: activityStatusStream,
           builder: (context, snapshot) {
             final status = snapshot.data ??
-                ActivityStatus(timeSpent: Duration.zero, isActive: false);
+                ActivityStatus(
+                    timeSpent: Duration.zero, isActive: false, percents: null);
             return InkWell(
               onTap: onSelect,
               child: Container(
@@ -47,7 +48,8 @@ class ActivityWidget extends StatelessWidget {
                     Text(activity.name),
                     const Spacer(),
                     Text(_formatDuration(status.timeSpent)),
-                    // Text(_formatDuration(status.timeInPercent)),
+                    if (status.percents != null)
+                      Text(': ' + status.percents!.toStringAsFixed(2) + '%', style: const TextStyle(fontWeight: FontWeight.bold)),
                     IconButton(
                       icon: const Icon(Icons.delete),
                       onPressed: onDelete,
