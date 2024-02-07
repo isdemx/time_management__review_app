@@ -1,18 +1,21 @@
 import 'dart:async';
-import 'dart:ui';
-import 'package:fluttertoast/fluttertoast.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:time_tracker/blocs/activity_cubit.dart';
 import 'package:time_tracker/models/activity_data.dart';
 import 'package:time_tracker/services/storage_service.dart';
 
 class ActivityStatus {
   final Duration timeSpent;
   final bool isActive;
+  final int percents = 0;
 
   ActivityStatus({required this.timeSpent, required this.isActive});
 
   Map<String, dynamic> toJson() {
     return {
       'timeSpent': timeSpent.inMilliseconds,
+      'percent': percents,
       'isActive': isActive,
     };
   }
@@ -58,9 +61,6 @@ class Activity {
       print('isActive ${isActive}');
       Future.delayed(const Duration(milliseconds: 100), () {
         _updateTimeSpent(isActive);
-        if (isActive) {
-          startOrResumeTimer();
-        }
       });
     }
   }
@@ -77,21 +77,27 @@ class Activity {
         .add(ActivityStatus(timeSpent: newTime, isActive: isActive));
   }
 
-  void startOrResumeTimer() {
+  void startOrResumeTimer(BuildContext context) {
     print('Start');
     _lastStartedTime ??= DateTime.now();
     _timer?.cancel();
     _timer = Timer.periodic(
         const Duration(seconds: 1), (_) => _updateTimeSpent(true));
     _updateActivityData(true);
+
+    final activityCubit = context.read<ActivityCubit>();
+    activityCubit.setActive(id);
   }
 
-  void pauseTimer() {
+  void pauseTimer(BuildContext context) {
     _updateAccumulatedTime();
     _timer?.cancel();
     _lastStartedTime = null;
     _updateActivityData(false);
     _updateTimeSpent(false);
+    final activityCubit = context.read<ActivityCubit>();
+    activityCubit.clearActive();
+    
   }
 
   void resetTimer() {

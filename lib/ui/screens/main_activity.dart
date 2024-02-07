@@ -33,7 +33,7 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
   }
 
   Future<void> _load() async {
-    await _storageService.initialize();  
+    await _storageService.initialize();
     await _initializeTimer();
     var activitiesData = _storageService.getAllActivities();
     List<Activity> loadedActivities = [];
@@ -48,12 +48,16 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
         selectedActivityIndex = i;
       }
     }
-    print('activities ${loadedActivities.toString()}');
-    print('selectedActivityIndex on load $selectedActivityIndex');
+
+    if (!mounted) {
+      return;
+    }
 
     if (selectedActivityIndex != null) {
+      loadedActivities[selectedActivityIndex!].startOrResumeTimer(context);
       _commonTimer.startOrResume();
     }
+
     setState(() {
       activities = loadedActivities;
     });
@@ -72,16 +76,16 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
   }
 
   void _selectActivity(int index) {
+    print('index $index');
     setState(() {
       print('selectedActivityIndex $selectedActivityIndex');
       if (selectedActivityIndex != null) {
         var activeActivity = activities[selectedActivityIndex!];
         print('activeActivity ${activeActivity.name}');
         print('selectedActivity ${activities[index].name}');
-
-        activeActivity.pauseTimer();
+        activeActivity.pauseTimer(context);
       }
-      activities[index].startOrResumeTimer();
+      activities[index].startOrResumeTimer(context);
       _commonTimer.startOrResume();
       selectedActivityIndex = index;
     });
@@ -101,7 +105,7 @@ class _MainActivityScreenState extends State<MainActivityScreen> {
   void pauseTimer() {
     _commonTimer.pause();
     if (selectedActivityIndex != null) {
-      activities[selectedActivityIndex!].pauseTimer();
+      activities[selectedActivityIndex!].pauseTimer(context);
     }
   }
 

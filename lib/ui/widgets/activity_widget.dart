@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:time_tracker/blocs/activity_cubit.dart';
 import 'package:time_tracker/models/activity.dart';
 
 class ActivityWidget extends StatelessWidget {
@@ -17,35 +19,44 @@ class ActivityWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<ActivityStatus>(
-      stream: activityStatusStream,
-      builder: (context, snapshot) {
-        final status = snapshot.data ?? ActivityStatus(timeSpent: Duration.zero, isActive: false);
-        return InkWell(
-          onTap: onSelect,
-          child: Container(
-            padding: const EdgeInsets.all(8.0),
-            margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-            decoration: BoxDecoration(
-              color: activity.color.withOpacity(status.isActive ? 0.5 : 1),
-              borderRadius: BorderRadius.circular(8.0),
-              border: status.isActive
-                  ? Border.all(color: Colors.black, width: 2.0)
-                  : null,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: <Widget>[
-                Text(activity.name),
-                const Spacer(),
-                Text(_formatDuration(status.timeSpent)),
-                IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: onDelete,
+    return BlocBuilder<ActivityCubit, ActivityState>(
+      builder: (context, state) {
+        print('isActive ${state.activeId} ${activity.id}');
+        final isActive = state.activeId == activity.id;
+        return StreamBuilder<ActivityStatus>(
+          stream: activityStatusStream,
+          builder: (context, snapshot) {
+            final status = snapshot.data ??
+                ActivityStatus(timeSpent: Duration.zero, isActive: false);
+            return InkWell(
+              onTap: onSelect,
+              child: Container(
+                padding: const EdgeInsets.all(8.0),
+                margin:
+                    const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+                decoration: BoxDecoration(
+                  color: activity.color.withOpacity(isActive ? 0.5 : 1),
+                  borderRadius: BorderRadius.circular(8.0),
+                  border: isActive
+                      ? Border.all(color: Colors.black, width: 2.0)
+                      : null,
                 ),
-              ],
-            ),
-          ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: <Widget>[
+                    Text(activity.name),
+                    const Spacer(),
+                    Text(_formatDuration(status.timeSpent)),
+                    // Text(_formatDuration(status.timeInPercent)),
+                    IconButton(
+                      icon: const Icon(Icons.delete),
+                      onPressed: onDelete,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
