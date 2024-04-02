@@ -1,4 +1,4 @@
-package com.example.time_tracker
+package app.greenmonster.timereviewer
 
 import io.flutter.embedding.android.FlutterActivity
 
