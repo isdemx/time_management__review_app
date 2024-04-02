@@ -11,8 +11,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   var initializationSettingsAndroid =
       const AndroidInitializationSettings('@mipmap/ic_launcher');
+  var initializationSettingsIOS = const DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
   var initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
+    iOS: initializationSettingsIOS
   );
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
