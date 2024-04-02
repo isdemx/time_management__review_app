@@ -51,7 +51,7 @@ class _TimerDisplayState extends State<TimerDisplay> {
           Text(
             '$hours:$minutes:$seconds',
             style: const TextStyle(
-              fontSize: 24.0,
+              fontSize: 54.0,
               fontWeight: FontWeight.bold,
             ),
           ),
