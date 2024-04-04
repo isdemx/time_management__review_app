@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:time_tracker/blocs/activity_cubit.dart';
-import 'package:time_tracker/models/activity.dart';
+import 'package:time_tracker/old/blocs/activity_cubit.dart';
+import 'package:time_tracker/old/models/activity.dart';
 
 class ActivityWidget extends StatelessWidget {
   final Activity activity;
@@ -19,7 +19,7 @@ class ActivityWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<ActivityCubit, ActivityState>(
+    return BlocBuilder<ActivityCubit, ActivityStateOld>(
       builder: (context, state) {
         print('isActive ${state.activeId} ${activity.id}');
         final isActive = state.activeId == activity.id;

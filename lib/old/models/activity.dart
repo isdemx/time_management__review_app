@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:time_tracker/blocs/activity_cubit.dart';
-import 'package:time_tracker/models/activity_data.dart';
-import 'package:time_tracker/services/storage_service.dart';
+import 'package:time_tracker/old/blocs/activity_cubit.dart';
+import 'package:time_tracker/old/models/activity_data.dart';
+import 'package:time_tracker/old/services/storage_service.dart';
 
 class ActivityStatus {
   final Duration timeSpent;

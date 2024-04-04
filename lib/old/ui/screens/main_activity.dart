@@ -1,11 +1,11 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:time_tracker/models/activity.dart';
-import 'package:time_tracker/models/common_timer.dart';
-import 'package:time_tracker/services/storage_service.dart';
-import 'package:time_tracker/ui/widgets/activity_widget.dart';
-import 'package:time_tracker/ui/widgets/timer_display.dart';
+import 'package:time_tracker/old/models/activity.dart';
+import 'package:time_tracker/old/models/common_timer.dart';
+import 'package:time_tracker/old/services/storage_service.dart';
+import 'package:time_tracker/old/ui/widgets/activity_widget.dart';
+import 'package:time_tracker/old/ui/widgets/timer_display.dart';
 
 class MainActivityScreen extends StatefulWidget {
   const MainActivityScreen({Key? key}) : super(key: key);

@@ -1,17 +1,17 @@
 class Activity {
+  final String id;
   final String name;
-  final String color;
+  final String color; // Предполагается использование HEX строки для цвета
   final String icon;
-  // final String group; // TODO
-  // final String type; // TODO
+  final String? groupId; // Идентификатор группы
   final bool isNotified;
 
   Activity({
+    required this.id,
     required this.name,
     required this.color,
     required this.icon,
-    // required this.group,
-    // required this.type,
+    this.groupId,
     required this.isNotified,
   });
 }
