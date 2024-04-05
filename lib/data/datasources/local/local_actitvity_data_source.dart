@@ -7,43 +7,77 @@ class LocalActivityDataSource {
   static Database? _database;
 
   Future<Database> get database async {
+    // await _deleteDatabase();
     if (_database != null) return _database!;
-    // Инициализация базы данных, если она еще не была инициализирована
     _database = await _initDatabase();
+    print('Database initialized');
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
+  Future<void> _deleteDatabase() async {
     final documentsDirectory = await getDatabasesPath();
     final path = join(documentsDirectory, 'activity.db');
-    return await openDatabase(path, version: 1, onOpen: (db) {}, onCreate: (Database db, int version) async {
-      await db.execute('''
+
+    await deleteDatabase(path);
+    print('Database deleted');
+  }
+
+  Future<Database> _initDatabase() async {
+    try {
+      final documentsDirectory = await getDatabasesPath();
+      final path = join(documentsDirectory, 'activity.db');
+      print('DB Path: $path'); // Логирование пути к базе данных
+      return await openDatabase(path, version: 1, onOpen: (db) {},
+          onCreate: (Database db, int version) async {
+        await db.execute('''
         CREATE TABLE activities(
           id TEXT PRIMARY KEY,
           name TEXT,
           color TEXT,
           icon TEXT,
           groupId TEXT,
-          isNotified INTEGER
+          isNotified INTEGER,
+          isArchived INTEGER DEFAULT 0
         )
       ''');
-    });
+        print('Table activities created');
+      });
+    } catch (e) {
+      print('Error initializing database: $e');
+      rethrow;
+    }
   }
 
   Future<void> addActivity(ActivityModel activity) async {
-    final db = await database;
-    await db.insert('activities', activity.toJson(), conflictAlgorithm: ConflictAlgorithm.replace);
+    try {
+      final db = await database;
+      final result = await db.insert('activities', activity.toJson(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      print('Activity added: $result'); // Логирование добавления активности
+    } catch (e) {
+      print('Error adding activity: $e'); // Логирование ошибки
+    }
   }
 
   Future<void> updateActivity(ActivityModel activity) async {
     final db = await database;
-    await db.update('activities', activity.toJson(), where: 'id = ?', whereArgs: [activity.id]);
+    await db.update('activities', activity.toJson(),
+        where: 'id = ?', whereArgs: [activity.id]);
   }
 
   Future<void> archiveActivity(String id) async {
-    final db = await database;
-    // Предполагаем, что архивация происходит путем установки специального флага в записи
-    // Для этого должно быть соответствующее поле в таблице, которое здесь не показано
+    try {
+      final db = await database;
+      int result = await db.update(
+        'activities',
+        {'isArchived': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      print('Activity archived: $result');
+    } catch (e) {
+      print('Error archiving activity: $e');
+    }
   }
 
   Future<ActivityModel?> getActivity(String id) async {
@@ -57,7 +91,11 @@ class LocalActivityDataSource {
 
   Future<List<ActivityModel>> getAllActivities() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('activities');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'activities',
+      where: 'isArchived = ?',
+      whereArgs: [0],
+    );
     return List.generate(maps.length, (i) {
       return ActivityModel.fromJson(maps[i]);
     });

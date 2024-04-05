@@ -9,7 +9,7 @@ class SprintRepositoryImpl implements SprintRepository {
   SprintRepositoryImpl({required this.localDataSource});
 
   @override
-  Future<void> createSprint(SprintModel sprint) async {
+  Future<void> createSprint(Sprint sprint) async {
     await localDataSource.createSprint(sprint);
   }
 
@@ -29,12 +29,17 @@ class SprintRepositoryImpl implements SprintRepository {
   }
 
   @override
-  Future<Sprint> getSprintDetails(String sprintId) async {
+  Future<SprintModel?> getSprintDetails(String sprintId) async {
     return await localDataSource.getSprintDetails(sprintId);
   }
 
   @override
   Future<Map<String, dynamic>> getSprintStatistics(String sprintId) async {
     return await localDataSource.getSprintStatistics(sprintId);
+  }
+
+  @override
+  Future<SprintModel?> getActiveSprint() async {
+    return await localDataSource.getActiveSprint();
   }
 }
