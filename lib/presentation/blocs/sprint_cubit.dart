@@ -72,16 +72,14 @@ class SprintCubit extends Cubit<SprintState> {
   }
 
   void startOrAddActivity(Activity activity) async {
-    print('startOrAddActivity');
     if (state is SprintLoaded) {
       await _addActivityToSprint(
           (state as SprintLoaded).sprint.id, activity.id);
       _reloadActiveSprint();
     } else {
       Sprint newSprint = await _createNewSprint();
-
       await _addActivityToSprint(newSprint.id, activity.id);
-      emit(SprintLoaded(newSprint));
+      _reloadActiveSprint();
     }
   }
 

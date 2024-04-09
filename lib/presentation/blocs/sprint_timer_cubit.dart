@@ -53,8 +53,6 @@ class SprintTimerCubit extends Cubit<SprintTimerState> {
             _calculator.calculateActiveDuration(_currentSprint!);
         Map<String, Duration> activityDurations =
             _activityCalculator.calculateAllActivityDurations(_currentSprint!);
-        print(
-            'timeline active actitivty ${_currentSprint?.timeLine.last.activityId}');
         emit(SprintTimerState(
             sprintDuration: sprintDuration,
             activityDurations: activityDurations,

@@ -1,30 +1,22 @@
+import 'package:time_tracker/domain/entities/activity_duration.dart';
 import 'package:time_tracker/domain/entities/sprint.dart';
-import 'package:time_tracker/domain/entities/time_line_event.dart';
+import 'package:time_tracker/domain/utils/time_duration_calculator.dart';
 
 class SprintDurationCalculator {
+  final TimeDurationCalculator _timeDurationCalculator =
+      TimeDurationCalculator();
+
   Duration calculateActiveDuration(Sprint sprint) {
-    Duration activeDuration = const Duration();
-    DateTime? lastActiveTime;
-    bool isIdle = false;
+    List<ActivityDuration> durations =
+        _timeDurationCalculator.calculateActivityDurations(sprint);
 
-    for (TimeLineEvent event in sprint.timeLine) {
-      if (event.idle) {
-        if (lastActiveTime != null && !isIdle) {
-          activeDuration += event.time.difference(lastActiveTime);
-        }
-        isIdle = true;
-      } else {
-        if (isIdle || lastActiveTime == null) {
-          lastActiveTime = event.time;
-          isIdle = false;
-        }
-      }
-    }
+    Duration idleDuration = ActivityDuration.listToMap(durations)['idle'] ??
+        const Duration(milliseconds: 0);
 
-
-    if (!isIdle && lastActiveTime != null && sprint.isActive) {
-      activeDuration += DateTime.now().difference(lastActiveTime);
-    }
+    DateTime endTime =
+        sprint.endTime ?? DateTime.now(); // If no end time - it's active sprint
+    Duration totalDuration = endTime.difference(sprint.startTime);
+    Duration activeDuration = totalDuration - idleDuration;
 
     return activeDuration;
   }

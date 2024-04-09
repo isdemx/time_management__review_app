@@ -126,11 +126,44 @@ class LocalSprintDataSource {
     return null;
   }
 
-  // Реализация метода для получения статистики спринта
   Future<Map<String, dynamic>> getSprintStatistics(String sprintId) async {
-    // Реализация будет зависеть от структуры данных timeline
-    // и от того, как именно вы хотите вычислять статистику.
-    // Это может включать анализ timestamps, activityId, и других данных в timeline.
-    return {};
+    final db = await database;
+    final List<Map<String, dynamic>> sprintMaps = await db.query(
+      'sprints',
+      where: 'id = ?',
+      whereArgs: [sprintId],
+    );
+
+    if (sprintMaps.isEmpty) {
+      return {'sprintDuration': 0};
+    }
+
+    final SprintModel sprint = SprintModel.fromJson(sprintMaps.first);
+    Duration activeDuration = Duration();
+
+    DateTime? lastActiveTime;
+    bool isIdle = false;
+
+    // Перебор всех событий в таймлайне
+    for (TimeLineEvent event in sprint.timeLine) {
+      if (event.idle) {
+        if (lastActiveTime != null && !isIdle) {
+          activeDuration += event.time.difference(lastActiveTime);
+        }
+        isIdle = true;
+      } else {
+        if (isIdle || lastActiveTime == null) {
+          lastActiveTime = event.time;
+          isIdle = false;
+        }
+      }
+    }
+
+    // Добавить оставшееся время, если спринт все еще активен
+    if (!isIdle && lastActiveTime != null && sprint.isActive) {
+      activeDuration += DateTime.now().difference(lastActiveTime);
+    }
+
+    return {'sprintDuration': activeDuration.inSeconds};
   }
 }
