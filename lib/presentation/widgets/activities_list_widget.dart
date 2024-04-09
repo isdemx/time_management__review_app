@@ -4,6 +4,7 @@ import 'package:time_tracker/data/utils/color_utils.dart';
 import 'package:time_tracker/presentation/blocs/activity_cubit.dart';
 import 'package:time_tracker/domain/entities/activity.dart';
 import 'package:time_tracker/presentation/blocs/sprint_cubit.dart';
+import 'package:time_tracker/presentation/widgets/activity_timer_widget.dart';
 import 'package:uuid/uuid.dart';
 
 class ActivitiesListWidget extends StatelessWidget {
@@ -31,7 +32,6 @@ class ActivitiesListWidget extends StatelessWidget {
                     if (state.activities.isEmpty) {
                       return const Center(child: Text('No activities found'));
                     }
-                    // Получение ID последней активности из таймлайна
                     String? lastActivityId = activeSprint?.timeLine.isNotEmpty == true
                         ? activeSprint?.timeLine.last.activityId
                         : null;
@@ -53,6 +53,7 @@ class ActivitiesListWidget extends StatelessWidget {
                           ),
                           child: ListTile(
                             title: Text(activity.name),
+                            subtitle: ActivityTimerWidget(activityId: activity.id),
                             trailing: IconButton(
                               icon: const Icon(Icons.delete),
                               onPressed: () => context.read<ActivityCubit>().archiveActivity(activity.id),

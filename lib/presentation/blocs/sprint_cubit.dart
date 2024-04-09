@@ -47,7 +47,7 @@ class SprintCubit extends Cubit<SprintState> {
   }
 
   Future<Sprint> _createNewSprint() async {
-    final String sprintId = const Uuid().v4(); // Генерация ID спринта.
+    final String sprintId = const Uuid().v4();
     final Sprint newSprint = Sprint(
       id: sprintId,
       startTime: DateTime.now(),
@@ -72,13 +72,12 @@ class SprintCubit extends Cubit<SprintState> {
   }
 
   void startOrAddActivity(Activity activity) async {
+    print('startOrAddActivity');
     if (state is SprintLoaded) {
-      print('start activitty, loaded');
       await _addActivityToSprint(
           (state as SprintLoaded).sprint.id, activity.id);
       _reloadActiveSprint();
     } else {
-      print('start activitty, not loaded');
       Sprint newSprint = await _createNewSprint();
 
       await _addActivityToSprint(newSprint.id, activity.id);
@@ -89,7 +88,7 @@ class SprintCubit extends Cubit<SprintState> {
   void addIdle() async {
     if (state is SprintLoaded) {
       await _addIdleToSprint((state as SprintLoaded).sprint.id);
-      // Обновление состояния может потребовать дополнительного вызова, если UI должен отразить этот факт
+      _reloadActiveSprint();
     }
   }
 
@@ -97,7 +96,6 @@ class SprintCubit extends Cubit<SprintState> {
     if (state is SprintLoaded) {
       await _finishSprint((state as SprintLoaded).sprint.id);
       emit(SprintInitial());
-      // Возвращаем состояние в исходное, предполагая что спринт завершён
     }
   }
 }

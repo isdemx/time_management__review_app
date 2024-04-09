@@ -8,8 +8,12 @@ class SprintLoading extends SprintState {}
 
 class SprintLoaded extends SprintState {
   final Sprint sprint;
+  final Map<String, Duration> activityDurations;
 
-  SprintLoaded(this.sprint);
+  SprintLoaded(this.sprint, {this.activityDurations = const {}});
+
+  @override
+  List<Object?> get props => [sprint, activityDurations];
 }
 
 class SprintError extends SprintState {
