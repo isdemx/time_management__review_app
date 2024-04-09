@@ -7,7 +7,6 @@ import 'package:time_tracker/domain/use_cases/activity/add_activity.dart';
 import 'package:time_tracker/domain/use_cases/activity/archive_activity.dart';
 import 'package:time_tracker/domain/use_cases/activity/get_all_activities.dart';
 import 'package:time_tracker/domain/use_cases/sprint/add_actitivty_to_sprint.dart';
-import 'package:time_tracker/infrostructure/services_locator.dart';
 import 'package:time_tracker/presentation/blocs/activity_cubit.dart';
 import 'package:time_tracker/presentation/blocs/sprint_cubit.dart';
 import 'package:time_tracker/presentation/blocs/sprint_timer_cubit.dart';
@@ -23,10 +22,9 @@ FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
 void main() async {
-  setupLocator(); // Настраиваем GetIt
+  // setupLocator();
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialization for notifications
   var initializationSettingsAndroid =
       const AndroidInitializationSettings('@mipmap/ic_launcher');
   var initializationSettingsIOS = const DarwinInitializationSettings(
@@ -92,11 +90,14 @@ void main() async {
         create: (context) => sprintTimerCubit,
       ),
     ],
-    child: MyApp(),
+    child: const MyApp(),
   ));
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({Key? key})
+      : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

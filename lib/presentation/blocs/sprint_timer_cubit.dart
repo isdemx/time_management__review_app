@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import 'package:time_tracker/domain/entities/sprint.dart';
 import 'package:time_tracker/domain/services/sprint_activity_duration_calculator.dart';
 import 'package:time_tracker/domain/services/sprint_duration_calculator.dart';
 import 'package:time_tracker/presentation/blocs/sprint_cubit.dart';
-import 'package:time_tracker/presentation/services/sprint_management_service.dart';
 
 class SprintTimerState {
   final Duration sprintDuration;
@@ -26,7 +24,6 @@ class SprintTimerCubit extends Cubit<SprintTimerState> {
   final SprintActivityDurationCalculator _activityCalculator =
       SprintActivityDurationCalculator();
   final SprintDurationCalculator _calculator = SprintDurationCalculator();
-  final SprintManagementService sprintManagementService = GetIt.instance<SprintManagementService>();
 
   SprintTimerCubit({
     required this.sprintCubit,
@@ -81,13 +78,11 @@ class SprintTimerCubit extends Cubit<SprintTimerState> {
         activityDurations: {},
         isRunning: false));
     sprintCubit.finishSprint();
-    sprintManagementService.notifySprintFinished();
   }
 
   void pauseTimer() {
     _stopTimer();
     sprintCubit.addIdle();
-    sprintManagementService.notifyTimerPaused();
   }
 
   @override
