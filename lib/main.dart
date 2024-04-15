@@ -7,10 +7,12 @@ import 'package:time_tracker/domain/use_cases/activity/add_activity.dart';
 import 'package:time_tracker/domain/use_cases/activity/archive_activity.dart';
 import 'package:time_tracker/domain/use_cases/activity/get_all_activities.dart';
 import 'package:time_tracker/domain/use_cases/sprint/add_actitivty_to_sprint.dart';
+import 'package:time_tracker/domain/use_cases/sprint/archive_sprint.dart';
+import 'package:time_tracker/domain/use_cases/sprint/get_all_sprints.dart';
 import 'package:time_tracker/presentation/blocs/activity_cubit.dart';
 import 'package:time_tracker/presentation/blocs/sprint_cubit.dart';
 import 'package:time_tracker/presentation/blocs/sprint_timer_cubit.dart';
-import 'package:time_tracker/presentation/pages/main_activity_page.dart';
+import 'package:time_tracker/presentation/pages/home_page.dart';
 import 'package:time_tracker/domain/use_cases/sprint/create_sprint.dart';
 import 'package:time_tracker/domain/use_cases/sprint/add_idle_to_sprint.dart';
 import 'package:time_tracker/domain/use_cases/sprint/finish_sprint.dart';
@@ -59,6 +61,8 @@ void main() async {
   final addIdleToSprint = AddIdleToSprint(sprintRepository);
   final finishSprint = FinishSprint(sprintRepository);
   final getActiveSprint = GetActiveSprint(sprintRepository);
+  final getAllSprints = GetAllSprints(sprintRepository);
+  final archiveSprint = ArchiveSprint(sprintRepository);
 
   final activityCubit = ActivityCubit(
     getAllActivities: getAllActivities,
@@ -68,12 +72,13 @@ void main() async {
 
   // Create SprintCubit
   final sprintCubit = SprintCubit(
-    createSprint: createSprint,
-    addActivityToSprint: addActivityToSprint,
-    addIdleToSprint: addIdleToSprint,
-    finishSprint: finishSprint,
-    getActiveSprint: getActiveSprint,
-  );
+      createSprint: createSprint,
+      addActivityToSprint: addActivityToSprint,
+      addIdleToSprint: addIdleToSprint,
+      finishSprint: finishSprint,
+      getActiveSprint: getActiveSprint,
+      getAllSprints: getAllSprints,
+      archiveSprint: archiveSprint);
 
   // Create SprintTimerCubit
   final sprintTimerCubit = SprintTimerCubit(sprintCubit: sprintCubit);
@@ -95,18 +100,30 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key})
-      : super(key: key);
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Time Management Reviewer',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(
+          value: BlocProvider.of<ActivityCubit>(context),
+        ),
+        BlocProvider.value(
+          value: BlocProvider.of<SprintCubit>(context),
+        ),
+        BlocProvider.value(
+          value: BlocProvider.of<SprintTimerCubit>(context),
+        ),
+      ],
+      child: MaterialApp(
+        title: 'Time Management Reviewer',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
+        ),
+        home: const HomePage(),
       ),
-      home: const MainActivityPage(),
     );
   }
 }

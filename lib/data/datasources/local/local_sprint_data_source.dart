@@ -22,13 +22,13 @@ class LocalSprintDataSource {
     final path = join(documentsDirectory, 'sprint.db');
 
     await deleteDatabase(path);
-    print('Database deleted');
+    print('Database Sprint deleted');
   }
 
   Future<Database> _initDb() async {
     final documentsDirectory = await getDatabasesPath();
     final path = join(documentsDirectory, "sprint.db");
-    print('DB will be inited');
+    print('DB Sprint will be inited');
     return await openDatabase(path, version: 1, onCreate: (db, version) async {
       print('In async');
       await db.execute('''
@@ -37,10 +37,11 @@ class LocalSprintDataSource {
           startTime TEXT,
           endTime TEXT,
           isActive INTEGER,
-          timeline TEXT
+          timeline TEXT,
+          archived INTEGER DEFAULT 0
         );
       ''');
-      print('New table created');
+      print('New table sprints created');
     });
   }
 
@@ -109,7 +110,10 @@ class LocalSprintDataSource {
   Future<SprintModel?> getActiveSprint() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('sprints',
-        where: 'isActive = ?', whereArgs: [1], limit: 1);
+        where:
+            'isActive = ? AND archived = ?',
+        whereArgs: [1, 0],
+        limit: 1);
     if (maps.isNotEmpty) {
       return SprintModel.fromJson(maps.first);
     }
@@ -165,5 +169,28 @@ class LocalSprintDataSource {
     }
 
     return {'sprintDuration': activeDuration.inSeconds};
+  }
+
+  Future<List<SprintModel>> getAllSprints() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'sprints',
+      where: 'archived = ?',
+      whereArgs: [0], // 0 means not archived
+    );
+    print('getAllSprints from DB ${maps.toString()}');
+    return List<SprintModel>.from(
+        maps.map((sprint) => SprintModel.fromJson(sprint)));
+  }
+
+  Future<void> archiveSprint(String sprintId) async {
+    final db = await database;
+    await db.update(
+      'sprints',
+      {'archived': 1},
+      where: 'id = ?',
+      whereArgs: [sprintId],
+    );
+    print('Sprint archived');
   }
 }

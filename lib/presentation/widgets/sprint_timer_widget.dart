@@ -5,12 +5,14 @@ class TimerDisplay extends StatelessWidget {
   final Duration duration;
   final VoidCallback onPause;
   final VoidCallback onReset;
+  final bool isRunning;
 
   const TimerDisplay({
     Key? key,
     required this.duration,
     required this.onPause,
     required this.onReset,
+    required this.isRunning
   }) : super(key: key);
 
   @override
@@ -25,8 +27,8 @@ class TimerDisplay extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(TimeFormatUtil.formatDuration(duration), style: const TextStyle(fontSize: 54.0, fontWeight: FontWeight.bold)),
-          IconButton(icon: const Icon(Icons.pause), onPressed: onPause, color: Colors.red),
-          IconButton(icon: const Icon(Icons.stop), onPressed: onReset, color: Colors.orange),
+          if(isRunning) IconButton(icon: const Icon(Icons.pause), onPressed: onPause, color: Colors.red),
+          if(!isRunning && (duration != Duration.zero)) IconButton(icon: const Icon(Icons.stop), onPressed: onReset, color: Colors.orange),
         ],
       ),
     );

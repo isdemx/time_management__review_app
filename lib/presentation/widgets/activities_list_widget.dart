@@ -16,14 +16,14 @@ class ActivitiesListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.read<SprintCubit>().loadActiveSprint();
     return Column(
       children: [
         Expanded(
           child: BlocBuilder<SprintCubit, SprintState>(
             builder: (context, sprintState) {
               final activeSprint = sprintState is SprintLoaded ? sprintState.sprint : null;
-              print('activeSprint $activeSprint');
-
+              print('activeSprint!! ${activeSprint?.id}');
               return BlocBuilder<ActivityCubit, ActivityState>(
                 builder: (context, state) {
                   if (state is ActivityLoading) {
@@ -35,6 +35,8 @@ class ActivitiesListWidget extends StatelessWidget {
                     String? lastActivityId = activeSprint?.timeLine.isNotEmpty == true
                         ? activeSprint?.timeLine.last.activityId
                         : null;
+
+                    print('lastActivityId ${lastActivityId}');
 
                     return ListView.builder(
                       itemCount: state.activities.length,

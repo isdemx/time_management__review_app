@@ -10,7 +10,7 @@ class LocalActivityDataSource {
     // await _deleteDatabase();
     if (_database != null) return _database!;
     _database = await _initDatabase();
-    print('Database initialized');
+    print('Database Activity initialized');
     return _database!;
   }
 
@@ -19,7 +19,7 @@ class LocalActivityDataSource {
     final path = join(documentsDirectory, 'activity.db');
 
     await deleteDatabase(path);
-    print('Database deleted');
+    print('Database Activity deleted');
   }
 
   Future<Database> _initDatabase() async {

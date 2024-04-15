@@ -16,6 +16,11 @@ class SprintLoaded extends SprintState {
   List<Object?> get props => [sprint, activityDurations];
 }
 
+class SprintsLoaded extends SprintState {
+  final List<Sprint> allSprints;
+  SprintsLoaded(this.allSprints);
+}
+
 class SprintError extends SprintState {
   final String message;
 

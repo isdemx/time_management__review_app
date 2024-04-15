@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:time_tracker/domain/entities/sprint.dart';
-import 'package:time_tracker/domain/services/sprint_activity_duration_calculator.dart';
-import 'package:time_tracker/domain/services/sprint_duration_calculator.dart';
+import 'package:time_tracker/domain/services/sprint_and_activities_durations_calculator.dart';
 import 'package:time_tracker/presentation/blocs/sprint_cubit.dart';
 
 class SprintTimerState {
@@ -21,9 +20,8 @@ class SprintTimerCubit extends Cubit<SprintTimerState> {
   StreamSubscription? sprintSubscription;
   Timer? _timer;
   Sprint? _currentSprint;
-  final SprintActivityDurationCalculator _activityCalculator =
-      SprintActivityDurationCalculator();
-  final SprintDurationCalculator _calculator = SprintDurationCalculator();
+  bool isActuallyRunning = false;
+  final SprintAndActivitiesDurationsCalculator totalCalculator = SprintAndActivitiesDurationsCalculator();
 
   SprintTimerCubit({
     required this.sprintCubit,
@@ -36,7 +34,7 @@ class SprintTimerCubit extends Cubit<SprintTimerState> {
 
   void _init() {
     sprintSubscription = sprintCubit.stream.listen((sprintState) {
-      if (sprintState is SprintLoaded && sprintState.sprint.isActive) {
+      if (sprintState is SprintLoaded && sprintState.sprint.isActive && !sprintState.sprint.timeLine.last.idle) {
         _currentSprint = sprintState.sprint;
         _startTimer();
       } else {
@@ -47,22 +45,22 @@ class SprintTimerCubit extends Cubit<SprintTimerState> {
 
   void _startTimer() {
     _timer?.cancel();
+    isActuallyRunning = true;
+    
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_currentSprint != null) {
-        Duration sprintDuration =
-            _calculator.calculateActiveDuration(_currentSprint!);
-        Map<String, Duration> activityDurations =
-            _activityCalculator.calculateAllActivityDurations(_currentSprint!);
+        var durations = totalCalculator.calculateAllDurations(_currentSprint!);
         emit(SprintTimerState(
-            sprintDuration: sprintDuration,
-            activityDurations: activityDurations,
-            isRunning: true));
+            sprintDuration: durations.sprintDuration,
+            activityDurations: durations.activitiesDurations,
+            isRunning: isActuallyRunning));
       }
     });
   }
 
   void _stopTimer() {
     _timer?.cancel();
+    isActuallyRunning = false;
     emit(SprintTimerState(
         sprintDuration: state.sprintDuration,
         activityDurations: state.activityDurations,

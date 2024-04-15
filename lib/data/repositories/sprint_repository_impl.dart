@@ -42,4 +42,14 @@ class SprintRepositoryImpl implements SprintRepository {
   Future<SprintModel?> getActiveSprint() async {
     return await localDataSource.getActiveSprint();
   }
+
+  @override
+  Future<List<SprintModel>?> getAllSprints() async {
+    return await localDataSource.getAllSprints();
+  }
+
+  @override
+  Future<void> archiveSprint(String sprintId) async {
+    return await localDataSource.archiveSprint( sprintId);
+  }
 }

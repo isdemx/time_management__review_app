@@ -9,4 +9,6 @@ abstract class SprintRepository {
   Future<SprintModel?> getSprintDetails(String sprintId);
   Future<SprintModel?> getActiveSprint();
   Future<Map<String, dynamic>> getSprintStatistics(String sprintId);
+  Future<List<SprintModel>?> getAllSprints();
+  Future<void> archiveSprint(String sprintId);
 }
