@@ -55,7 +55,6 @@ class SprintCubit extends Cubit<SprintState> {
   }
 
   Future<Sprint> _createNewSprint() async {
-    print('CREATE NEW SPRINT!!!');
     final String sprintId = const Uuid().v4();
     final Sprint newSprint = Sprint(
       id: sprintId,
