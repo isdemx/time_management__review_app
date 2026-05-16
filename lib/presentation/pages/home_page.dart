@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:time_tracker/presentation/pages/main_activity_page.dart';
+import 'package:time_tracker/presentation/pages/sessions_overview_page.dart';
 import 'package:time_tracker/presentation/pages/settings_page.dart';
-import 'package:time_tracker/presentation/pages/sprints_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
 
   @override
-  _HomePageState createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this, initialIndex: 1);
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
@@ -31,22 +31,31 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       body: TabBarView(
         controller: _tabController,
         children: const [
-          SprintsPage(),
-          MainActivityPage(),
+          SessionsOverviewPage(),
           SettingsPage(),
         ],
       ),
-      bottomNavigationBar: Material(
-        color: Theme.of(context).primaryColor,
-        child: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.list)),
-            Tab(icon: Icon(Icons.home)),
-            Tab(icon: Icon(Icons.settings)),
-          ],
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white54
+      bottomNavigationBar: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.paddingOf(context).bottom,
+        ),
+        child: Material(
+          color: Theme.of(context).colorScheme.surface,
+          clipBehavior: Clip.antiAlias,
+          child: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(icon: Icon(Icons.list)),
+              Tab(icon: Icon(Icons.settings)),
+            ],
+            labelColor: Theme.of(context).colorScheme.primary,
+            unselectedLabelColor:
+                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
+            indicatorColor: Theme.of(context).colorScheme.primary,
+            overlayColor: WidgetStatePropertyAll(
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+            ),
+          ),
         ),
       ),
     );
