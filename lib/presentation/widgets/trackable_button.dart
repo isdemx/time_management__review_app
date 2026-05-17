@@ -80,7 +80,8 @@ class _TrackableButtonState extends State<TrackableButton>
     if (oldWidget.isActive != widget.isActive) {
       _flowController.animateTo(
         widget.isActive ? 1 : 0,
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -114,7 +115,7 @@ class _TrackableButtonState extends State<TrackableButton>
 
   List<_FloatingParticle> _createParticles(int seed) {
     final random = math.Random(seed);
-    return List<_FloatingParticle>.generate(9, (index) {
+    return List<_FloatingParticle>.generate(11, (index) {
       final anchorX = 0.10 + random.nextDouble() * 0.80;
       final anchorY = 0.16 + random.nextDouble() * 0.68;
       return _FloatingParticle(
@@ -124,10 +125,13 @@ class _TrackableButtonState extends State<TrackableButton>
         anchorY: anchorY,
         vx: 0,
         vy: 0,
-        size: 0.035 + random.nextDouble() * 0.040,
+        size: 0.060 + random.nextDouble() * 0.190,
         phase: random.nextDouble(),
         phaseOffset: random.nextDouble(),
         speed: 0.65 + random.nextDouble() * 0.70,
+        rotation: random.nextDouble() * math.pi * 2,
+        rotationVelocity:
+            (random.nextDouble() * 2 - 1) * (0.16 + random.nextDouble() * 0.28),
         shape: (seed + index) % 3,
         spawnOffset: random.nextDouble() * 0.07,
       );
@@ -156,28 +160,29 @@ class _TrackableButtonState extends State<TrackableButton>
     final activeBlend = magnetToRight.clamp(0.0, 1.0).toDouble();
 
     for (final particle in _particles) {
-      particle.phase = (particle.phase + dt * 0.055 * particle.speed) % 1;
+      particle.phase = (particle.phase + dt * 0.070 * particle.speed) % 1;
+      particle.rotation += particle.rotationVelocity * dt * (1.0 + activeBlend);
 
       final waveX = math.sin(
             (particle.phase + particle.phaseOffset) * math.pi * 2,
           ) *
-          0.018;
+          0.044;
       final waveY = math.cos(
             (particle.phase * 0.86 + particle.phaseOffset) * math.pi * 2,
           ) *
-          0.022;
+          0.052;
       final driftTargetX = particle.anchorX + waveX;
       final driftTargetY = particle.anchorY + waveY;
-      final targetVx = activeBlend * (0.62 + particle.speed * 0.42);
-      final velocityEase = math.min(1.0, dt * (2.4 + activeBlend * 4.8));
+      final targetVx = activeBlend * (0.72 + particle.speed * 0.48);
+      final velocityEase = math.min(1.0, dt * (8.0 + activeBlend * 7.0));
 
       particle.vx += (targetVx - particle.vx) * velocityEase;
       particle.vy +=
-          ((driftTargetY - particle.y) * 4.2 - particle.vy * 2.0) * dt;
+          ((driftTargetY - particle.y) * 8.0 - particle.vy * 2.4) * dt;
 
       if (activeBlend < 0.98) {
         final driftWeight = 1 - activeBlend;
-        particle.vx += ((driftTargetX - particle.x) * 3.0 - particle.vx * 1.4) *
+        particle.vx += ((driftTargetX - particle.x) * 7.2 - particle.vx * 1.8) *
             driftWeight *
             dt;
       }
@@ -320,35 +325,6 @@ class _TrackableButtonState extends State<TrackableButton>
                     ],
                   ),
                 ),
-                if (widget.animated && _animationController != null)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: AnimatedBuilder(
-                        animation: Listenable.merge([
-                          _animationController!,
-                          _flowController,
-                        ]),
-                        builder: (context, _) {
-                          return Stack(
-                            children: [
-                              Positioned.fill(
-                                child: CustomPaint(
-                                  painter: _SubtleMatterPainter(
-                                    color: baseColor,
-                                    magnetToRight:
-                                        Curves.easeInOutCubic.transform(
-                                      _flowController.value,
-                                    ),
-                                    particles: _particles,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                  ),
                 if (widget.isActive)
                   Positioned.fill(
                     child: IgnorePointer(
@@ -377,6 +353,28 @@ class _TrackableButtonState extends State<TrackableButton>
                             ),
                           ],
                         ),
+                      ),
+                    ),
+                  ),
+                if (widget.animated && _animationController != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _animationController!,
+                          _flowController,
+                        ]),
+                        builder: (context, _) {
+                          return CustomPaint(
+                            painter: _SubtleMatterPainter(
+                              color: baseColor,
+                              magnetToRight: Curves.easeInOutCubic.transform(
+                                _flowController.value,
+                              ),
+                              particles: _particles,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -584,11 +582,8 @@ class _ModeZone extends StatelessWidget {
                 alignment: Alignment.bottomCenter,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(4, 0, 4, 7),
-                  child: Text(
-                    mode.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
+                  child: _ScrollableModeLabel(
+                    text: mode.name,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: Colors.white.withValues(alpha: 0.88),
                           fontWeight:
@@ -608,6 +603,31 @@ class _ModeZone extends StatelessWidget {
   }
 }
 
+class _ScrollableModeLabel extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+
+  const _ScrollableModeLabel({
+    required this.text,
+    this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        textAlign: TextAlign.center,
+        style: style,
+      ),
+    );
+  }
+}
+
 class _FloatingParticle {
   double x;
   double y;
@@ -619,6 +639,8 @@ class _FloatingParticle {
   double phase;
   final double phaseOffset;
   final double speed;
+  double rotation;
+  final double rotationVelocity;
   final int shape;
   final double spawnOffset;
 
@@ -633,6 +655,8 @@ class _FloatingParticle {
     required this.phase,
     required this.phaseOffset,
     required this.speed,
+    required this.rotation,
+    required this.rotationVelocity,
     required this.shape,
     required this.spawnOffset,
   });
@@ -657,51 +681,64 @@ class _SubtleMatterPainter extends CustomPainter {
     final outline = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = Colors.white.withValues(alpha: 0.036 + magnetToRight * 0.052)
+      ..color = Colors.white.withValues(alpha: 0.062 + magnetToRight * 0.060)
       ..blendMode = BlendMode.screen;
 
     for (final particle in particles) {
       final x = particle.x * size.width;
       final y = particle.y * size.height;
-      final rotation =
+      final wobble =
           math.sin((particle.phase + particle.phaseOffset) * math.pi * 2) *
-              0.18;
+              0.28;
+      final rotation = particle.rotation + wobble;
       final side = size.shortestSide * particle.size;
       final fill = Color.lerp(color, Colors.white, 0.70)
-              ?.withValues(alpha: 0.025 + magnetToRight * 0.040) ??
-          Colors.white.withValues(alpha: 0.025 + magnetToRight * 0.040);
+              ?.withValues(alpha: 0.048 + magnetToRight * 0.047) ??
+          Colors.white.withValues(alpha: 0.048 + magnetToRight * 0.047);
       paint.color = fill;
 
       if (particle.shape == 0) {
         canvas.drawCircle(Offset(x, y), side * 0.55, paint);
         canvas.drawCircle(Offset(x, y), side * 0.55, outline);
       } else if (particle.shape == 1) {
-        final rect = Rect.fromCenter(
-          center: Offset(x, y),
-          width: side,
-          height: side,
-        );
         canvas.save();
         canvas.translate(x, y);
         canvas.rotate(rotation);
-        canvas.translate(-x, -y);
         canvas.drawRRect(
-          RRect.fromRectAndRadius(rect, Radius.circular(side * 0.24)),
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+              center: Offset.zero,
+              width: side,
+              height: side,
+            ),
+            Radius.circular(side * 0.24),
+          ),
           paint,
         );
         canvas.drawRRect(
-          RRect.fromRectAndRadius(rect, Radius.circular(side * 0.24)),
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+              center: Offset.zero,
+              width: side,
+              height: side,
+            ),
+            Radius.circular(side * 0.24),
+          ),
           outline,
         );
         canvas.restore();
       } else {
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(rotation);
         final path = Path()
-          ..moveTo(x, y - side * 0.55)
-          ..lineTo(x + side * 0.52, y + side * 0.38)
-          ..lineTo(x - side * 0.52, y + side * 0.38)
+          ..moveTo(0, -side * 0.55)
+          ..lineTo(side * 0.52, side * 0.38)
+          ..lineTo(-side * 0.52, side * 0.38)
           ..close();
         canvas.drawPath(path, paint);
         canvas.drawPath(path, outline);
+        canvas.restore();
       }
     }
   }

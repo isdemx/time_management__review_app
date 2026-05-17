@@ -40,7 +40,7 @@ class _HomePageState extends State<HomePage>
           bottom: MediaQuery.paddingOf(context).bottom,
         ),
         child: Material(
-          color: Theme.of(context).colorScheme.surface,
+          color: Theme.of(context).scaffoldBackgroundColor,
           clipBehavior: Clip.antiAlias,
           child: TabBar(
             controller: _tabController,

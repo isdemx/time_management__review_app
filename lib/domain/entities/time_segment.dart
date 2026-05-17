@@ -1,4 +1,7 @@
 class TimeSegment {
+  static const pauseTrackableId = '__chronika_pause__';
+  static const pauseModeId = '__chronika_pause_main__';
+
   final String id;
   final String sessionId;
   final String trackableId;
@@ -20,6 +23,7 @@ class TimeSegment {
   });
 
   bool get isOpen => endAt == null;
+  bool get isPause => trackableId == pauseTrackableId;
 
   Duration durationUntil(DateTime now) {
     return (endAt ?? now).difference(startAt);

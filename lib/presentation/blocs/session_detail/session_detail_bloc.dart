@@ -70,6 +70,7 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       add(SessionDetailTrackableSelected(
         trackableId: event.trackableId,
         modeId: event.modeId ?? _defaultModeId(modes),
+        startAt: event.startAt,
       ));
       return;
     }
@@ -111,6 +112,7 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       add(SessionDetailTrackableSelected(
         trackableId: event.trackableId,
         modeId: event.modeId ?? _defaultModeId(modes),
+        startAt: event.startAt,
       ));
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
@@ -186,20 +188,58 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     Emitter<SessionDetailState> emit,
   ) async {
     final current = state;
-    if (current is! SessionDetailLoaded || !current.session.isActive) {
+    if (current is! SessionDetailLoaded || current.session.isFinished) {
       return;
     }
 
     final now = DateTime.now();
+    final startAt = event.startAt ?? now;
+    final endAt = event.endAt;
+
+    if (startAt.isAfter(now) || (endAt != null && endAt.isAfter(now))) {
+      emit(const SessionDetailFailure(message: 'Pause time cannot be future'));
+      return;
+    }
+
+    if (endAt != null) {
+      await _insertClosedPauseSegment(current, emit, startAt, endAt, now);
+      return;
+    }
+
+    if (!current.session.isActive) {
+      return;
+    }
+
     final openSegment = current.openSegment;
-    final closedSegment = openSegment?.copyWith(endAt: now, updatedAt: now);
-    final pausedSession = _pausedSession(current.session, now);
-    final optimisticSegments = current.segments
-        .map((segment) =>
-            closedSegment != null && segment.id == closedSegment.id
-                ? closedSegment
-                : segment)
-        .toList();
+    if (openSegment != null && openSegment.isPause && event.startAt == null) {
+      return;
+    }
+    if (openSegment != null && startAt.isBefore(openSegment.startAt)) {
+      emit(const SessionDetailFailure(
+        message: 'Pause start is before the active event start',
+      ));
+      return;
+    }
+
+    final closedSegment = openSegment?.copyWith(endAt: startAt, updatedAt: now);
+    final pauseSegment = TimeSegment(
+      id: const Uuid().v4(),
+      sessionId: current.session.id,
+      trackableId: TimeSegment.pauseTrackableId,
+      modeId: TimeSegment.pauseModeId,
+      startAt: startAt,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final pausedSession = _pausedSession(current.session, startAt, now);
+    final optimisticSegments = [
+      for (final segment in current.segments)
+        if (closedSegment != null && segment.id == closedSegment.id)
+          closedSegment
+        else
+          segment,
+      pauseSegment,
+    ]..sort((a, b) => a.startAt.compareTo(b.startAt));
 
     emit(current.copyWith(
       session: pausedSession,
@@ -211,7 +251,83 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       if (closedSegment != null) {
         await timelineRepository.updateSegment(closedSegment);
       }
+      await timelineRepository.saveSegment(pauseSegment);
       await sessionRepository.updateSession(pausedSession);
+    } catch (error) {
+      emit(SessionDetailFailure(message: error.toString()));
+    }
+  }
+
+  Future<void> _insertClosedPauseSegment(
+    SessionDetailLoaded current,
+    Emitter<SessionDetailState> emit,
+    DateTime startAt,
+    DateTime endAt,
+    DateTime now,
+  ) async {
+    if (!endAt.isAfter(startAt)) {
+      emit(
+          const SessionDetailFailure(message: 'Pause end must be after start'));
+      return;
+    }
+
+    final sorted = _sortedSegments(current.segments);
+    final intersectingSegments = sorted.where((segment) {
+      final segmentEnd = segment.endAt ?? now;
+      return segment.startAt.isBefore(endAt) && segmentEnd.isAfter(startAt);
+    }).toList();
+
+    if (intersectingSegments.length != 1) {
+      emit(const SessionDetailFailure(
+        message: 'Pause range must fit inside one existing event',
+      ));
+      return;
+    }
+
+    final source = intersectingSegments.single;
+    if (source.isPause) {
+      return;
+    }
+
+    final sourceEnd = source.endAt;
+    final updatedSource = _segmentWith(
+      source,
+      endAt: startAt,
+      updatedAt: now,
+    );
+    final pauseSegment = TimeSegment(
+      id: const Uuid().v4(),
+      sessionId: current.session.id,
+      trackableId: TimeSegment.pauseTrackableId,
+      modeId: TimeSegment.pauseModeId,
+      startAt: startAt,
+      endAt: endAt,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final continuation = TimeSegment(
+      id: const Uuid().v4(),
+      sessionId: source.sessionId,
+      trackableId: source.trackableId,
+      modeId: source.modeId,
+      startAt: endAt,
+      endAt: sourceEnd,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final nextSegments = [
+      for (final segment in sorted)
+        if (segment.id == source.id) updatedSource else segment,
+      pauseSegment,
+      continuation,
+    ]..sort((a, b) => a.startAt.compareTo(b.startAt));
+
+    emit(current.copyWith(segments: nextSegments, now: now));
+
+    try {
+      await timelineRepository.updateSegment(updatedSource);
+      await timelineRepository.saveSegment(pauseSegment);
+      await timelineRepository.saveSegment(continuation);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -244,6 +360,40 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
 
     if (!endAt.isAfter(event.startAt) || endAt.isAfter(now)) {
       emit(const SessionDetailFailure(message: 'Invalid custom time range'));
+      return;
+    }
+
+    if (current.segments.isEmpty) {
+      final inserted = TimeSegment(
+        id: const Uuid().v4(),
+        sessionId: current.session.id,
+        trackableId: event.trackableId,
+        modeId: event.modeId,
+        startAt: event.startAt,
+        endAt: endAt,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final session = current.session.copyWith(
+        status: SessionStatus.paused,
+        startedAt: current.session.startedAt ?? event.startAt,
+        pausedAt: endAt,
+        finishedAt: null,
+        updatedAt: now,
+      );
+
+      emit(current.copyWith(
+        session: session,
+        segments: [inserted],
+        now: now,
+      ));
+
+      try {
+        await sessionRepository.updateSession(session);
+        await timelineRepository.saveSegment(inserted);
+      } catch (error) {
+        emit(SessionDetailFailure(message: error.toString()));
+      }
       return;
     }
 
@@ -326,9 +476,21 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     }
 
     final now = DateTime.now();
+    final finishedAt = event.finishedAt ?? now;
+    if (finishedAt.isAfter(now)) {
+      emit(const SessionDetailFailure(message: 'Finish time cannot be future'));
+      return;
+    }
     final openSegment = current.openSegment;
-    final closedSegment = openSegment?.copyWith(endAt: now, updatedAt: now);
-    final finishedSession = _finishedSession(current.session, now);
+    if (openSegment != null && finishedAt.isBefore(openSegment.startAt)) {
+      emit(const SessionDetailFailure(
+        message: 'Finish time is before the active event start',
+      ));
+      return;
+    }
+    final closedSegment =
+        openSegment?.copyWith(endAt: finishedAt, updatedAt: now);
+    final finishedSession = _finishedSession(current.session, finishedAt, now);
     final optimisticSegments = current.segments
         .map((segment) =>
             closedSegment != null && segment.id == closedSegment.id
@@ -815,27 +977,27 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     );
   }
 
-  Session _pausedSession(Session session, DateTime now) {
+  Session _pausedSession(Session session, DateTime pausedAt, DateTime now) {
     return Session(
       id: session.id,
       name: session.name,
       status: SessionStatus.paused,
       startedAt: session.startedAt,
-      pausedAt: now,
+      pausedAt: pausedAt,
       finishedAt: null,
       createdAt: session.createdAt,
       updatedAt: now,
     );
   }
 
-  Session _finishedSession(Session session, DateTime now) {
+  Session _finishedSession(Session session, DateTime finishedAt, DateTime now) {
     return Session(
       id: session.id,
       name: session.name,
       status: SessionStatus.finished,
       startedAt: session.startedAt,
       pausedAt: null,
-      finishedAt: now,
+      finishedAt: finishedAt,
       createdAt: session.createdAt,
       updatedAt: now,
     );

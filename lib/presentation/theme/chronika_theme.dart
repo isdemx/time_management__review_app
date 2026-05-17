@@ -5,16 +5,16 @@ class ChronikaTheme {
   static const Color pink = Color(0xFFFF2D73);
   static const Color violet = Color(0xFF7C3CFF);
   static const Color blue = Color(0xFF246BFE);
-  static const Color lightBackground = Color(0xFFF7F3EC);
-  static const Color lightSurface = Color(0xFFFFFBF6);
+  static const Color lightBackground = Color(0xFFD2DDEA);
+  static const Color lightSurface = Color(0xFFEAF1FA);
   static const Color darkBackground = Color(0xFF0A101B);
   static const Color darkSurface = Color(0xFF121B2A);
 
   static ThemeData light() {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: violet,
+      seedColor: blue,
       brightness: Brightness.light,
-      primary: violet,
+      primary: blue,
       secondary: pink,
       tertiary: orange,
       surface: lightSurface,
@@ -30,7 +30,12 @@ class ChronikaTheme {
         surfaceTintColor: Colors.transparent,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: lightSurface,
+        backgroundColor: lightBackground,
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: blue,
+        unselectedLabelColor: const Color(0xFF1B2433).withValues(alpha: 0.48),
+        indicatorColor: blue,
       ),
       cardTheme: CardThemeData(
         color: lightSurface,
@@ -64,7 +69,12 @@ class ChronikaTheme {
         surfaceTintColor: Colors.transparent,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: darkSurface,
+        backgroundColor: darkBackground,
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: blue,
+        unselectedLabelColor: Colors.white.withValues(alpha: 0.45),
+        indicatorColor: blue,
       ),
       cardTheme: CardThemeData(
         color: darkSurface,

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:time_tracker/domain/entities/session.dart';
+import 'package:time_tracker/domain/entities/session_template.dart';
 import 'package:time_tracker/domain/entities/session_trackable.dart';
 import 'package:time_tracker/domain/entities/time_segment.dart';
 import 'package:time_tracker/domain/entities/trackable.dart';
@@ -89,7 +90,7 @@ void main() {
       expect(timelineRepository.segments, hasLength(1));
     });
 
-    test('pause closes the open segment and pauses the session', () async {
+    test('pause closes the open segment and opens a pause segment', () async {
       await _load(bloc);
       bloc.add(const SessionDetailTrackableSelected(
         trackableId: _Fixture.workTrackableId,
@@ -101,12 +102,19 @@ void main() {
 
       final loaded = await _waitForLoaded(
         bloc,
-        (state) => state.session.isPaused && state.openSegment == null,
+        (state) =>
+            state.session.isPaused &&
+            state.openSegment != null &&
+            state.openSegment!.isPause,
       );
 
-      expect(loaded.segments.single.endAt, isNotNull);
+      expect(loaded.segments, hasLength(2));
+      expect(loaded.segments.first.endAt, isNotNull);
+      expect(loaded.openSegment!.isPause, isTrue);
       expect(loaded.session.pausedAt, isNotNull);
-      expect(timelineRepository.segments.single.endAt, isNotNull);
+      await _waitUntil(() => timelineRepository.segments.length == 2);
+      expect(timelineRepository.segments.first.endAt, isNotNull);
+      expect(timelineRepository.segments.last.isPause, isTrue);
     });
 
     test('finish closes the open segment and finishes the session', () async {
@@ -468,6 +476,8 @@ class _Fixture {
 class _FakeSessionRepository implements SessionV2Repository {
   final sessions = <String, Session>{};
   final sessionTrackables = <SessionTrackable>[];
+  final templates = <String, SessionTemplate>{};
+  final templateTrackables = <SessionTemplateTrackable>[];
 
   @override
   Future<void> deleteSession(String id) async {
@@ -531,6 +541,44 @@ class _FakeSessionRepository implements SessionV2Repository {
     } else {
       sessionTrackables[index] = sessionTrackable;
     }
+  }
+
+  @override
+  Future<void> deleteSessionTemplate(String id) async {
+    templates.remove(id);
+    templateTrackables.removeWhere((item) => item.templateId == id);
+  }
+
+  @override
+  Future<List<SessionTemplateTrackable>> getSessionTemplateTrackables(
+    String templateId,
+  ) async {
+    return templateTrackables
+        .where((item) => item.templateId == templateId)
+        .toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  @override
+  Future<List<SessionTemplate>> getSessionTemplates() async {
+    return templates.values.toList();
+  }
+
+  @override
+  Future<void> saveSessionTemplate(SessionTemplate template) async {
+    templates[template.id] = template;
+  }
+
+  @override
+  Future<void> saveSessionTemplateTrackable(
+    SessionTemplateTrackable item,
+  ) async {
+    templateTrackables.add(item);
+  }
+
+  @override
+  Future<void> updateSessionTemplate(SessionTemplate template) async {
+    templates[template.id] = template;
   }
 }
 

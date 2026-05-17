@@ -23,3 +23,35 @@ class SessionRestarted extends SessionsEvent {
 
   const SessionRestarted({required this.sessionId});
 }
+
+class SessionTemplateCreatedFromSession extends SessionsEvent {
+  final String sessionId;
+  final String name;
+
+  const SessionTemplateCreatedFromSession({
+    required this.sessionId,
+    required this.name,
+  });
+}
+
+class SessionTemplateStarted extends SessionsEvent {
+  final String templateId;
+
+  const SessionTemplateStarted({required this.templateId});
+}
+
+class SessionTemplateRenamed extends SessionsEvent {
+  final String templateId;
+  final String name;
+
+  const SessionTemplateRenamed({
+    required this.templateId,
+    required this.name,
+  });
+}
+
+class SessionTemplateDeleted extends SessionsEvent {
+  final String templateId;
+
+  const SessionTemplateDeleted({required this.templateId});
+}

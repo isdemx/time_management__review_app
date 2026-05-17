@@ -1,0 +1,15 @@
+.DS_Store
+.atom/
+.idea
+.packages
+.pub/
+build/
+ios/.generated/
+packages
+pubspec.lock
+.dart_tool/
+.flutter-plugins-dependencies
+
+# ignore example generated
+example/ios/Runner.xcodeproj/
+example/ios/Flutter/

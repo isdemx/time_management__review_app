@@ -13,10 +13,12 @@ class SessionDetailRequested extends SessionDetailEvent {
 class SessionDetailTrackableAdded extends SessionDetailEvent {
   final String trackableId;
   final String? modeId;
+  final DateTime? startAt;
 
   const SessionDetailTrackableAdded({
     required this.trackableId,
     this.modeId,
+    this.startAt,
   });
 }
 
@@ -47,11 +49,16 @@ class SessionDetailCustomSegmentInserted extends SessionDetailEvent {
 }
 
 class SessionDetailPaused extends SessionDetailEvent {
-  const SessionDetailPaused();
+  final DateTime? startAt;
+  final DateTime? endAt;
+
+  const SessionDetailPaused({this.startAt, this.endAt});
 }
 
 class SessionDetailFinished extends SessionDetailEvent {
-  const SessionDetailFinished();
+  final DateTime? finishedAt;
+
+  const SessionDetailFinished({this.finishedAt});
 }
 
 class SessionDetailRenamed extends SessionDetailEvent {

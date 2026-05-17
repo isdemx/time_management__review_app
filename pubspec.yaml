@@ -41,6 +41,8 @@ dependencies:
   shared_preferences: ^2.2.2
   fluttertoast: ^8.2.4
   flutter_local_notifications: ^17.0.0
+  live_activities: ^1.9.1+1
+  wakelock_plus: ^1.3.3
   uuid: ^4.3.3
   sqflite: ^2.3.3
   path_provider: ^2.1.2
@@ -60,11 +62,17 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^2.0.0
 
+dependency_overrides:
+  app_group_directory:
+    path: third_party/app_group_directory
+  flutter_native_image:
+    path: third_party/flutter_native_image
+
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/logo.png" 
+  image_path: "assets/chronika-logo.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

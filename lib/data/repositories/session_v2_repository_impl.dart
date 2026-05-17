@@ -1,8 +1,10 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:time_tracker/data/database/app_database.dart';
 import 'package:time_tracker/data/models/session_model.dart';
+import 'package:time_tracker/data/models/session_template_model.dart';
 import 'package:time_tracker/data/models/session_trackable_model.dart';
 import 'package:time_tracker/domain/entities/session.dart';
+import 'package:time_tracker/domain/entities/session_template.dart';
 import 'package:time_tracker/domain/entities/session_trackable.dart';
 import 'package:time_tracker/domain/repositories/session_v2_repository.dart';
 
@@ -123,6 +125,78 @@ class SessionV2RepositoryImpl implements SessionV2Repository {
     );
     return rows
         .map((row) => SessionTrackableModel.fromMap(row).toEntity())
+        .toList();
+  }
+
+  @override
+  Future<void> saveSessionTemplate(SessionTemplate template) async {
+    final db = await _db;
+    await db.insert(
+      'session_templates',
+      SessionTemplateModel.fromEntity(template).toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<void> updateSessionTemplate(SessionTemplate template) async {
+    final db = await _db;
+    await db.update(
+      'session_templates',
+      SessionTemplateModel.fromEntity(template).toMap(),
+      where: 'id = ?',
+      whereArgs: [template.id],
+    );
+  }
+
+  @override
+  Future<void> deleteSessionTemplate(String id) async {
+    final db = await _db;
+    await db.delete(
+      'session_template_trackables',
+      where: 'template_id = ?',
+      whereArgs: [id],
+    );
+    await db.delete('session_templates', where: 'id = ?', whereArgs: [id]);
+  }
+
+  @override
+  Future<List<SessionTemplate>> getSessionTemplates() async {
+    final db = await _db;
+    final rows = await db.query(
+      'session_templates',
+      orderBy: 'updated_at DESC',
+    );
+    return rows
+        .map((row) => SessionTemplateModel.fromMap(row).toEntity())
+        .toList();
+  }
+
+  @override
+  Future<void> saveSessionTemplateTrackable(
+    SessionTemplateTrackable item,
+  ) async {
+    final db = await _db;
+    await db.insert(
+      'session_template_trackables',
+      SessionTemplateTrackableModel.fromEntity(item).toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<List<SessionTemplateTrackable>> getSessionTemplateTrackables(
+    String templateId,
+  ) async {
+    final db = await _db;
+    final rows = await db.query(
+      'session_template_trackables',
+      where: 'template_id = ?',
+      whereArgs: [templateId],
+      orderBy: 'sort_order ASC',
+    );
+    return rows
+        .map((row) => SessionTemplateTrackableModel.fromMap(row).toEntity())
         .toList();
   }
 }

@@ -14,8 +14,12 @@ class SessionsLoading extends SessionsState {
 
 class SessionsLoaded extends SessionsState {
   final List<Session> sessions;
+  final List<SessionTemplate> templates;
 
-  const SessionsLoaded({required this.sessions});
+  const SessionsLoaded({
+    required this.sessions,
+    this.templates = const [],
+  });
 }
 
 class SessionsFailure extends SessionsState {
@@ -26,6 +30,10 @@ class SessionsFailure extends SessionsState {
 
 class SessionRestartReady extends SessionsState {
   final String sessionId;
+  final bool editTitle;
 
-  const SessionRestartReady({required this.sessionId});
+  const SessionRestartReady({
+    required this.sessionId,
+    this.editTitle = false,
+  });
 }

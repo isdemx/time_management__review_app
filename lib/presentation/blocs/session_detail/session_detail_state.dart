@@ -43,7 +43,9 @@ class SessionDetailLoaded extends SessionDetailState {
 
   Duration durationForTrackable(String trackableId) {
     return segments
-        .where((segment) => segment.trackableId == trackableId)
+        .where(
+          (segment) => !segment.isPause && segment.trackableId == trackableId,
+        )
         .fold<Duration>(
           Duration.zero,
           (duration, segment) => duration + segment.durationUntil(now),
@@ -51,10 +53,10 @@ class SessionDetailLoaded extends SessionDetailState {
   }
 
   Duration get sessionDuration {
-    return segments.fold<Duration>(
-      Duration.zero,
-      (duration, segment) => duration + segment.durationUntil(now),
-    );
+    return segments.where((segment) => !segment.isPause).fold<Duration>(
+          Duration.zero,
+          (duration, segment) => duration + segment.durationUntil(now),
+        );
   }
 
   SessionDetailLoaded copyWith({

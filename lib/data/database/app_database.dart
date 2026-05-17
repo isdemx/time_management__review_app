@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 class AppDatabase {
   static const databaseName = 'time_tracker_v2.db';
-  static const databaseVersion = 1;
+  static const databaseVersion = 2;
 
   static Database? _database;
 
@@ -19,6 +19,7 @@ class AppDatabase {
       path,
       version: databaseVersion,
       onCreate: _createSchema,
+      onUpgrade: _upgradeSchema,
     );
     _database = opened;
     return opened;
@@ -103,6 +104,45 @@ class AppDatabase {
     );
     await db.execute(
       'CREATE INDEX idx_segments_open ON time_segments(session_id, end_at)',
+    );
+    await _createTemplateSchema(db);
+  }
+
+  Future<void> _upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await _createTemplateSchema(db);
+    }
+  }
+
+  Future<void> _createTemplateSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS session_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS session_template_trackables (
+        id TEXT PRIMARY KEY,
+        template_id TEXT NOT NULL,
+        trackable_id TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(template_id) REFERENCES session_templates(id),
+        FOREIGN KEY(trackable_id) REFERENCES trackables(id)
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_template_trackables_template ON session_template_trackables(template_id)',
     );
   }
 }
