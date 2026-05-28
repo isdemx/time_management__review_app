@@ -73,8 +73,9 @@ class _SessionDetailView extends StatefulWidget {
 }
 
 class _SessionDetailViewState extends State<_SessionDetailView> {
-  static const double _trackableSliderHeight = 92;
-  static const double _trackableSliderFingerGap = 12;
+  static const double _trackableSliderHeight =
+      _TrackableSliderAction.sliderHeight;
+  static const double _trackableSliderFingerGap = 14;
 
   Timer? _ticker;
   late final ValueNotifier<DateTime> _clock;
@@ -82,6 +83,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
   _LongPressTrackableTarget? _longPressTarget;
   bool _pauseSliderActive = false;
   bool _stopSliderActive = false;
+  bool _sliderOpenedByMenu = false;
   double? _sliderTop;
   final GlobalKey _bodyStackKey = GlobalKey();
   bool _initialModeSwitchConsumed = false;
@@ -178,10 +180,18 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
                               _moveTrackableSlider(position, state),
                           onLongPressEnd: (position) =>
                               _endTrackableSlider(context, state, position),
+                          onMenuTap: _openTrackableSliderMenu,
                         ),
                       ),
                     ],
                   ),
+                  if (_sliderOpenedByMenu)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: _closeTrackableSlider,
+                      ),
+                    ),
                   if (_longPressTarget != null ||
                       _pauseSliderActive ||
                       _stopSliderActive)
@@ -189,28 +199,54 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
                       left: 0,
                       right: 0,
                       top: _sliderTop ?? 120,
-                      child: IgnorePointer(
-                        child: _TrackableActionSliderOverlay(
-                          selectedAction: _sliderAction,
-                          disabledActions: _disabledSliderActions(state),
-                          showCommandActions:
-                              !_pauseSliderActive && !_stopSliderActive,
-                          description: _pauseSliderActive
-                              ? 'Choose when pause started'
-                              : _stopSliderActive
-                                  ? 'Choose when session ended'
-                                  : null,
-                        ),
-                      ),
+                      child: _sliderOpenedByMenu
+                          ? GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTapUp: (details) => _tapTrackableSlider(
+                                context,
+                                state,
+                                details.globalPosition,
+                              ),
+                              child: _TrackableActionSliderOverlay(
+                                selectedAction: _sliderAction,
+                                disabledActions: _disabledSliderActions(state),
+                                showCommandActions:
+                                    !_pauseSliderActive && !_stopSliderActive,
+                                accentColor: _sliderAccentColor(state),
+                                description: _pauseSliderActive
+                                    ? 'Choose when pause started'
+                                    : _stopSliderActive
+                                        ? 'Choose when session ended'
+                                        : null,
+                              ),
+                            )
+                          : IgnorePointer(
+                              child: _TrackableActionSliderOverlay(
+                                selectedAction: _sliderAction,
+                                disabledActions: _disabledSliderActions(state),
+                                showCommandActions:
+                                    !_pauseSliderActive && !_stopSliderActive,
+                                accentColor: _sliderAccentColor(state),
+                                description: _pauseSliderActive
+                                    ? 'Choose when pause started'
+                                    : _stopSliderActive
+                                        ? 'Choose when session ended'
+                                        : null,
+                              ),
+                            ),
                     ),
                 ],
               ),
             ),
-            floatingActionButton: _SessionQuickActions(
-              canAdd: !isFinished,
-              keepScreenOn: _keepScreenOn,
-              onAdd: () => _showTrackablePicker(context),
-              onToggleKeepScreenOn: _toggleKeepScreenOn,
+            floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+            floatingActionButton: Transform.translate(
+              offset: const Offset(0, -18),
+              child: _SessionQuickActions(
+                canAdd: !isFinished,
+                keepScreenOn: _keepScreenOn,
+                onAdd: () => _showTrackablePicker(context),
+                onToggleKeepScreenOn: _toggleKeepScreenOn,
+              ),
             ),
           );
         }
@@ -385,6 +421,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
         activeModeId: TimeSegment.pauseModeId,
         activeModeName: 'Session paused',
         modes: const [],
+        sessionDuration: _sessionDurationAt(state, state.now),
         trackableDuration: barSegment.durationUntil(state.now),
         updatedAt: state.now,
       );
@@ -416,6 +453,8 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       activeModeId: barSegment.modeId,
       activeModeName: activeMode?.name ?? 'Main',
       modes: _visibleBarModes(modes, barSegment.modeId),
+      previousActivity: _previousBarActivity(state, barSegment),
+      sessionDuration: _sessionDurationAt(state, state.now),
       trackableDuration: state.durationForTrackable(trackable.id),
       updatedAt: state.now,
     );
@@ -429,6 +468,54 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
 
     if (state.session.isPaused && state.segments.isNotEmpty) {
       return state.segments.last;
+    }
+
+    return null;
+  }
+
+  ActiveSessionBarPreviousActivity? _previousBarActivity(
+    SessionDetailLoaded state,
+    TimeSegment current,
+  ) {
+    final segments = _sortedSegments(state.segments);
+    final currentIndex = segments.lastIndexWhere(
+      (segment) => segment.id == current.id,
+    );
+    if (currentIndex <= 0) {
+      return null;
+    }
+
+    for (var index = currentIndex - 1; index >= 0; index--) {
+      final segment = segments[index];
+      if (segment.isPause ||
+          (segment.trackableId == current.trackableId &&
+              segment.modeId == current.modeId)) {
+        continue;
+      }
+
+      final trackable = state.trackables
+          .where((item) => item.id == segment.trackableId)
+          .cast<Trackable?>()
+          .firstWhere((item) => item != null, orElse: () => null);
+      if (trackable == null) {
+        continue;
+      }
+
+      final mode = (state.modesByTrackable[trackable.id] ?? const [])
+          .where((item) => item.id == segment.modeId)
+          .cast<TrackableMode?>()
+          .firstWhere((item) => item != null, orElse: () => null);
+      final modes = state.modesByTrackable[trackable.id] ?? const [];
+
+      return ActiveSessionBarPreviousActivity(
+        trackableId: trackable.id,
+        trackableName: trackable.name,
+        trackableColor: trackable.color,
+        modeId: segment.modeId,
+        modeName: mode?.name ?? 'Main',
+        modes: _visibleBarModes(modes, segment.modeId),
+        trackableDuration: state.durationForTrackable(trackable.id),
+      );
     }
 
     return null;
@@ -505,6 +592,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       );
       _pauseSliderActive = false;
       _stopSliderActive = false;
+      _sliderOpenedByMenu = false;
       _sliderTop = (localPosition.dy -
               _trackableSliderHeight -
               _trackableSliderFingerGap)
@@ -523,6 +611,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       _longPressTarget = null;
       _pauseSliderActive = true;
       _stopSliderActive = false;
+      _sliderOpenedByMenu = false;
       _sliderTop = (localPosition.dy -
               _trackableSliderHeight -
               _trackableSliderFingerGap)
@@ -541,6 +630,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       _longPressTarget = null;
       _pauseSliderActive = false;
       _stopSliderActive = true;
+      _sliderOpenedByMenu = false;
       _sliderTop = (localPosition.dy -
               _trackableSliderHeight -
               _trackableSliderFingerGap)
@@ -553,6 +643,66 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
     setState(() {
       _sliderAction = _actionFromGlobalPosition(globalPosition, state);
     });
+  }
+
+  void _openTrackableSliderMenu(
+    String trackableId,
+    String modeId,
+    Offset globalPosition,
+  ) {
+    final localPosition = _globalToBodyLocal(globalPosition);
+    if (localPosition == null) {
+      return;
+    }
+
+    setState(() {
+      _longPressTarget = _LongPressTrackableTarget(
+        trackableId: trackableId,
+        modeId: modeId,
+      );
+      _pauseSliderActive = false;
+      _stopSliderActive = false;
+      _sliderOpenedByMenu = true;
+      _sliderTop = (localPosition.dy -
+              _trackableSliderHeight -
+              _trackableSliderFingerGap)
+          .clamp(8.0, double.infinity);
+      _sliderAction = null;
+    });
+  }
+
+  void _closeTrackableSlider() {
+    setState(() {
+      _longPressTarget = null;
+      _pauseSliderActive = false;
+      _stopSliderActive = false;
+      _sliderOpenedByMenu = false;
+      _sliderAction = null;
+      _sliderTop = null;
+    });
+  }
+
+  void _tapTrackableSlider(
+    BuildContext context,
+    SessionDetailLoaded state,
+    Offset globalPosition,
+  ) {
+    final target = _longPressTarget;
+    final isPauseTarget = _pauseSliderActive;
+    final isStopTarget = _stopSliderActive;
+    final action = _actionFromGlobalPosition(globalPosition, state);
+    _closeTrackableSlider();
+    if ((!isPauseTarget && !isStopTarget && target == null) || action == null) {
+      return;
+    }
+    _performSliderAction(
+      context,
+      state,
+      action,
+      target,
+      isPauseTarget,
+      isStopTarget,
+    );
   }
 
   void _endTrackableSlider(
@@ -568,6 +718,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       _longPressTarget = null;
       _pauseSliderActive = false;
       _stopSliderActive = false;
+      _sliderOpenedByMenu = false;
       _sliderAction = null;
       _sliderTop = null;
     });
@@ -576,6 +727,24 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       return;
     }
 
+    _performSliderAction(
+      context,
+      state,
+      action,
+      target,
+      isPauseTarget,
+      isStopTarget,
+    );
+  }
+
+  void _performSliderAction(
+    BuildContext context,
+    SessionDetailLoaded state,
+    _TrackableSliderAction action,
+    _LongPressTrackableTarget? target,
+    bool isPauseTarget,
+    bool isStopTarget,
+  ) {
     switch (action.kind) {
       case _TrackableSliderActionKind.backdate:
         final offset = action.backdateOffset;
@@ -602,29 +771,46 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
         }
         return;
       case _TrackableSliderActionKind.customTime:
-        if (isPauseTarget) {
-          _showPauseCustomTimeDialog(context, state);
-        } else if (isStopTarget) {
-          _showStopCustomTimeDialog(context, state);
-        } else {
-          _showCustomTimeDialog(context, state, target!);
-        }
+        _runAfterSliderDismissed(() {
+          if (!context.mounted) {
+            return;
+          }
+          if (isPauseTarget) {
+            _showPauseCustomTimeDialog(context, state);
+          } else if (isStopTarget) {
+            _showStopCustomTimeDialog(context, state);
+          } else {
+            _showCustomTimeDialog(context, state, target!);
+          }
+        });
         return;
       case _TrackableSliderActionKind.edit:
         if (isPauseTarget || isStopTarget) {
           return;
         }
-        _showTrackableEditor(context, state, target!.trackableId);
-        return;
-      case _TrackableSliderActionKind.archive:
-        if (isPauseTarget || isStopTarget) {
-          return;
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${action.label} is next')));
+        final trackableId = target!.trackableId;
+        _runAfterSliderDismissed(() {
+          if (!context.mounted) {
+            return;
+          }
+          _showTrackableEditor(context, state, trackableId);
+        });
         return;
     }
+  }
+
+  void _runAfterSliderDismissed(VoidCallback action) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      Future<void>.delayed(const Duration(milliseconds: 180), () {
+        if (!mounted) {
+          return;
+        }
+        action();
+      });
+    });
   }
 
   Set<_TrackableSliderAction> _disabledSliderActions(
@@ -692,6 +878,27 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
   double? get _bodyWidth {
     final box = _bodyStackKey.currentContext?.findRenderObject() as RenderBox?;
     return box?.size.width;
+  }
+
+  Color _sliderAccentColor(SessionDetailLoaded state) {
+    if (_pauseSliderActive) {
+      return Colors.orangeAccent;
+    }
+    if (_stopSliderActive) {
+      return Colors.redAccent;
+    }
+    final target = _longPressTarget;
+    if (target == null) {
+      return ChronikaTheme.violet;
+    }
+    final trackable = state.trackables
+        .where((item) => item.id == target.trackableId)
+        .cast<Trackable?>()
+        .firstWhere((item) => item != null, orElse: () => null);
+    if (trackable == null) {
+      return ChronikaTheme.violet;
+    }
+    return ColorUtils.fromHex(trackable.color);
   }
 
   Future<void> _showCustomTimeDialog(
@@ -814,90 +1021,129 @@ class _SessionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final isFinished = state.session.isFinished;
     final isActive = state.session.isActive;
+    final isPaused = state.session.isPaused;
     final statusColor = _statusColor(state);
     final timerBackground = _timerBackgroundColor(context, state);
     final timerForeground = Theme.of(context).colorScheme.onSurface;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).colorScheme.surface,
-            Theme.of(context).colorScheme.surfaceContainerHighest,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0F17),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant.withValues(
+                  alpha: 0.22,
+                ),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.28),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
+              spreadRadius: -16,
+            ),
           ],
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 12),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 74,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: isPaused ? 76 : 68,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.22),
+                      ),
                     ),
-                    child: Text(
-                      _statusLabel(state),
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.w800,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _statusLabel(state),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            color: Color.lerp(statusColor, Colors.white, 0.12),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            Expanded(
-              child: Center(
+              const SizedBox(width: 6),
+              Expanded(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: timerBackground,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        timerBackground.withValues(alpha: 0.56),
+                        const Color(0xFF0D111C).withValues(alpha: 0.92),
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.16),
+                      color: Colors.white.withValues(alpha: 0.13),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: timerBackground.withValues(alpha: 0.20),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
+                        color: timerBackground.withValues(alpha: 0.16),
+                        blurRadius: 16,
+                        offset: const Offset(0, 7),
+                        spreadRadius: -8,
                       ),
                     ],
                   ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
+                      horizontal: 8,
+                      vertical: 8,
                     ),
                     child: ValueListenableBuilder<DateTime>(
                       valueListenable: clock,
                       builder: (context, now, _) {
+                        final parts = _durationParts(
+                          _sessionDurationAt(state, now),
+                        );
                         return FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            TimeFormatUtil.formatDuration(
-                              _sessionDurationAt(state, now),
-                            ),
+                            '${parts[0]}:${parts[1]}:${parts[2]}',
                             textAlign: TextAlign.center,
+                            maxLines: 1,
                             style: Theme.of(context)
                                 .textTheme
-                                .displaySmall
+                                .displayMedium
                                 ?.copyWith(
-                                  fontWeight: FontWeight.w300,
-                                  letterSpacing: 0,
-                                  color: timerForeground,
+                              fontSize: 40,
+                              fontWeight: FontWeight.w300,
+                              letterSpacing: 0,
+                              color: timerForeground.withValues(
+                                alpha: 0.92,
+                              ),
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 10,
                                 ),
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -905,51 +1151,63 @@ class _SessionHeader extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-            SizedBox(
-              width: 82,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  SizedBox(
-                    width: 38,
-                    height: 38,
-                    child: _SessionHeaderIconButton(
-                      icon: Icons.pause,
-                      enabled: isActive,
-                      backgroundColor:
-                          Colors.orangeAccent.withValues(alpha: 0.24),
-                      foregroundColor: Colors.orange.shade700,
-                      tooltip: 'Pause',
-                      onTap: onPausePressed,
-                      onLongPressStart: onPauseLongPressStart,
-                      onLongPressMove: onPauseLongPressMove,
-                      onLongPressEnd: onPauseLongPressEnd,
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 70,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: _SessionHeaderIconButton(
+                        icon: Icons.pause,
+                        enabled: isActive,
+                        backgroundColor:
+                            Colors.orangeAccent.withValues(alpha: 0.24),
+                        foregroundColor: Colors.orange.shade700,
+                        tooltip: 'Pause',
+                        onTap: onPausePressed,
+                        onLongPressStart: onPauseLongPressStart,
+                        onLongPressMove: onPauseLongPressMove,
+                        onLongPressEnd: onPauseLongPressEnd,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  SizedBox(
-                    width: 38,
-                    height: 38,
-                    child: _SessionHeaderIconButton(
-                      icon: Icons.stop,
-                      enabled: !isFinished,
-                      backgroundColor: Colors.redAccent.withValues(alpha: 0.18),
-                      foregroundColor: Colors.red.shade600,
-                      tooltip: 'Finish',
-                      onTap: onStopPressed,
-                      onLongPressStart: onStopLongPressStart,
-                      onLongPressMove: onStopLongPressMove,
-                      onLongPressEnd: onStopLongPressEnd,
+                    SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: _SessionHeaderIconButton(
+                        icon: Icons.stop,
+                        enabled: !isFinished,
+                        backgroundColor:
+                            Colors.redAccent.withValues(alpha: 0.18),
+                        foregroundColor: Colors.red.shade600,
+                        tooltip: 'Finish',
+                        onTap: onStopPressed,
+                        onLongPressStart: onStopLongPressStart,
+                        onLongPressMove: onStopLongPressMove,
+                        onLongPressEnd: onStopLongPressEnd,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  List<String> _durationParts(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    return [
+      hours.toString().padLeft(2, '0'),
+      minutes.toString().padLeft(2, '0'),
+      seconds.toString().padLeft(2, '0'),
+    ];
   }
 
   String _statusLabel(SessionDetailLoaded state) {
@@ -957,7 +1215,7 @@ class _SessionHeader extends StatelessWidget {
       return 'Active';
     }
     if (state.session.isPaused) {
-      return 'Paused';
+      return 'Pause';
     }
     return 'Finished';
   }
@@ -1091,7 +1349,7 @@ class _SessionHeaderIconButtonState extends State<_SessionHeaderIconButton> {
                   : null,
             ),
             child: Center(
-              child: Icon(widget.icon, color: foreground, size: 22),
+              child: Icon(widget.icon, color: foreground, size: 20),
             ),
           ),
         ),
@@ -1191,8 +1449,9 @@ class _EditableSessionTitleState extends State<_EditableSessionTitle> {
     }
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
+        Flexible(
           child: Text(
             widget.sessionName,
             maxLines: 1,
@@ -1202,10 +1461,18 @@ class _EditableSessionTitleState extends State<_EditableSessionTitle> {
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
         ),
-        IconButton(
-          onPressed: _startEditing,
-          icon: const Icon(Icons.edit),
-          tooltip: 'Edit session name',
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 30,
+          height: 30,
+          child: IconButton(
+            onPressed: _startEditing,
+            icon: const Icon(Icons.edit),
+            iconSize: 18,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+            tooltip: 'Edit session name',
+          ),
         ),
       ],
     );
@@ -1265,32 +1532,48 @@ class _SessionQuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = ChronikaTheme.blue;
+    const activeColor = ChronikaTheme.violet;
     final baseGradient = LinearGradient(
       colors: [
-        activeColor.withValues(alpha: 0.82),
-        Color.lerp(activeColor, ChronikaTheme.violet, 0.22)!
-            .withValues(alpha: 0.78),
+        const Color(0xFF101725).withValues(alpha: 0.94),
+        Color.lerp(const Color(0xFF101725), activeColor, 0.18)!
+            .withValues(alpha: 0.92),
       ],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     );
 
     return Material(
-      elevation: 8,
+      elevation: 0,
       color: Colors.transparent,
-      shadowColor: activeColor.withValues(alpha: 0.24),
+      shadowColor: Colors.transparent,
       borderRadius: BorderRadius.circular(999),
       clipBehavior: Clip.antiAlias,
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: baseGradient,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+          border: Border.all(
+            color: activeColor.withValues(alpha: 0.35),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: activeColor.withValues(alpha: 0.20),
+              blurRadius: 20,
+              spreadRadius: -7,
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.28),
+              blurRadius: 24,
+              spreadRadius: -12,
+              offset: const Offset(0, 12),
+            ),
+          ],
         ),
         child: SizedBox(
-          width: 126,
-          height: 56,
+          width: 124,
+          height: 54,
           child: Row(
             children: [
               Expanded(
@@ -1303,7 +1586,7 @@ class _SessionQuickActions extends StatelessWidget {
               Container(
                 width: 1,
                 height: double.infinity,
-                color: Colors.white.withValues(alpha: 0.18),
+                color: activeColor.withValues(alpha: 0.24),
               ),
               Expanded(
                 child: _SessionQuickActionButton(
@@ -1348,13 +1631,13 @@ class _SessionQuickActionButton extends StatelessWidget {
           curve: Curves.easeOutCubic,
           decoration: BoxDecoration(
             color: selected
-                ? Colors.black.withValues(alpha: 0.15)
+                ? ChronikaTheme.violet.withValues(alpha: 0.18)
                 : Colors.transparent,
             boxShadow: selected
                 ? [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.28),
-                      blurRadius: 10,
+                      color: ChronikaTheme.violet.withValues(alpha: 0.22),
+                      blurRadius: 12,
                       offset: const Offset(0, 4),
                       spreadRadius: -7,
                     ),
@@ -1370,10 +1653,12 @@ class _SessionQuickActionButton extends StatelessWidget {
           child: Center(
             child: Icon(
               icon,
-              size: 29,
+              size: 28,
               color: onPressed == null
                   ? Colors.white.withValues(alpha: 0.38)
-                  : Colors.white,
+                  : selected
+                      ? Color.lerp(ChronikaTheme.violet, Colors.white, 0.60)
+                      : Colors.white.withValues(alpha: 0.92),
             ),
           ),
         ),
@@ -1529,6 +1814,147 @@ class _SessionEventsList extends StatelessWidget {
   }
 }
 
+enum _TimelineScale {
+  twoHours('2h', Duration(hours: 2)),
+  oneHour('1h', Duration(hours: 1)),
+  thirtyMinutes('30m', Duration(minutes: 30)),
+  fifteenMinutes('15m', Duration(minutes: 15)),
+  fiveMinutes('5m', Duration(minutes: 5));
+
+  final String label;
+  final Duration duration;
+
+  const _TimelineScale(this.label, this.duration);
+}
+
+class _TimelineScaleSelector extends StatelessWidget {
+  final _TimelineScale value;
+  final ValueChanged<_TimelineScale> onChanged;
+
+  const _TimelineScaleSelector({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF070C14),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0C1320).withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.10),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      for (final scale in _TimelineScale.values)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: _TimelineScaleButton(
+                              scale: scale,
+                              selected: scale == value,
+                              onTap: () => onChanged(scale),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0C1320).withValues(alpha: 0.88),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
+                ),
+                child: Icon(
+                  Icons.search_rounded,
+                  color: Colors.white.withValues(alpha: 0.88),
+                  size: 22,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TimelineScaleButton extends StatelessWidget {
+  final _TimelineScale scale;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TimelineScaleButton({
+    required this.scale,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFF246BFE).withValues(alpha: 0.70)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF246BFE).withValues(alpha: 0.35),
+                      blurRadius: 16,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            scale.label,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: selected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.72),
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _VisualSessionTimeline extends StatefulWidget {
   final SessionDetailLoaded state;
   final List<TimeSegment> segments;
@@ -1540,9 +1966,11 @@ class _VisualSessionTimeline extends StatefulWidget {
 }
 
 class _VisualSessionTimelineState extends State<_VisualSessionTimeline> {
+  static const double _timelineIntervalHeight = 74;
+
   int? _draggingBoundaryIndex;
   DateTime? _pendingBoundaryAt;
-  double _zoom = 1;
+  _TimelineScale _scale = _TimelineScale.oneHour;
 
   @override
   void didUpdateWidget(covariant _VisualSessionTimeline oldWidget) {
@@ -1556,157 +1984,166 @@ class _VisualSessionTimelineState extends State<_VisualSessionTimeline> {
 
   @override
   Widget build(BuildContext context) {
-    final start = widget.segments.first.startAt;
-    final end = widget.segments.last.endAt ?? widget.state.now;
+    final firstEventStart = widget.segments.first.startAt;
+    final lastEventEnd = widget.segments.last.endAt ?? widget.state.now;
+    final start = widget.state.session.startedAt ?? firstEventStart;
+    final end = lastEventEnd.isAfter(start) ? lastEventEnd : widget.state.now;
     final total = math.max(1, end.difference(start).inSeconds);
+    final eventTotal = math.max(
+      1,
+      lastEventEnd.difference(firstEventStart).inSeconds,
+    );
+    final scaleSeconds = _scale.duration.inSeconds;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = math.max(constraints.maxHeight * 1.9 * _zoom, 720.0);
+        final height = math.max(
+          (total / scaleSeconds) * _timelineIntervalHeight,
+          constraints.maxHeight - 126,
+        );
         final pixelsPerSecond = height / total;
 
-        return Stack(
+        return Column(
           children: [
-            Positioned.fill(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
-                child: SizedBox(
-                  height: height + 24,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTapDown: (details) {
-                            final seconds =
-                                (details.localPosition.dy / pixelsPerSecond)
-                                    .round()
-                                    .clamp(0, total);
-                            _addRetrospectiveEvent(
-                              context,
-                              start.add(Duration(seconds: seconds)),
-                            );
-                          },
-                        ),
-                      ),
-                      _TimelineScaleRuler(
-                        start: start,
-                        height: height,
-                        totalSeconds: total,
-                        pixelsPerSecond: pixelsPerSecond,
-                      ),
-                      Positioned(
-                        left: 112,
-                        right: 0,
-                        top: 0,
-                        child: Text(
-                          'Tap empty timeline space to add a past event',
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                        ),
-                      ),
-                      for (int i = 0; i < widget.segments.length; i++)
-                        _TimelineEventBlock(
-                          state: widget.state,
-                          segment: widget.segments[i],
-                          top: widget.segments[i].startAt
-                                  .difference(start)
-                                  .inSeconds *
-                              pixelsPerSecond,
-                          height: math.max(
-                            34,
-                            (widget.segments[i].endAt ?? widget.state.now)
-                                    .difference(widget.segments[i].startAt)
-                                    .inSeconds *
-                                pixelsPerSecond,
-                          ),
-                          onDeleteRequested: () =>
-                              _confirmDeleteEvent(context, widget.segments[i]),
-                        ),
-                      for (int i = 0; i < widget.segments.length - 1; i++)
-                        _TimelineBoundaryHandle(
-                          top: ((_pendingBoundaryAt != null &&
-                                          _draggingBoundaryIndex == i
-                                      ? _pendingBoundaryAt!
-                                      : widget.segments[i].endAt ??
-                                          widget.segments[i + 1].startAt)
-                                  .difference(start)
-                                  .inSeconds *
-                              pixelsPerSecond),
-                          label: _formatTime(
-                            _pendingBoundaryAt != null &&
-                                    _draggingBoundaryIndex == i
-                                ? _pendingBoundaryAt!
-                                : widget.segments[i].endAt ??
-                                    widget.segments[i + 1].startAt,
-                          ),
-                          onDragStart: () {
-                            setState(() {
-                              _draggingBoundaryIndex = i;
-                              _pendingBoundaryAt = widget.segments[i].endAt ??
-                                  widget.segments[i + 1].startAt;
-                            });
-                          },
-                          onDragUpdate: (details) {
-                            final current = _pendingBoundaryAt ??
-                                widget.segments[i].endAt ??
-                                widget.segments[i + 1].startAt;
-                            final secondsDelta =
-                                (details.delta.dy / pixelsPerSecond).round();
-                            final raw = current.add(
-                              Duration(seconds: secondsDelta),
-                            );
-                            final min = widget.segments[i].startAt.add(
-                              const Duration(seconds: 1),
-                            );
-                            final max = (widget.segments[i + 1].endAt ??
-                                    widget.state.now)
-                                .subtract(const Duration(seconds: 1));
-                            setState(() {
-                              _pendingBoundaryAt = _clampDateTime(
-                                raw,
-                                min,
-                                max,
-                              );
-                            });
-                          },
-                          onDragEnd: () {
-                            final boundaryAt = _pendingBoundaryAt;
-                            setState(() {
-                              _draggingBoundaryIndex = null;
-                              _pendingBoundaryAt = null;
-                            });
-                            if (boundaryAt == null) {
-                              return;
-                            }
-                            context.read<SessionDetailBloc>().add(
-                                  SessionDetailSegmentBoundaryMoved(
-                                    previousSegmentId: widget.segments[i].id,
-                                    nextSegmentId: widget.segments[i + 1].id,
-                                    boundaryAt: boundaryAt,
-                                  ),
-                                );
-                          },
-                        ),
+            _TimelineScaleSelector(
+              value: _scale,
+              onChanged: (value) {
+                setState(() => _scale = value);
+              },
+            ),
+            Expanded(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF0A101B),
+                      Color(0xFF070C14),
                     ],
                   ),
                 ),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              top: 64,
-              bottom: 24,
-              width: 40,
-              child: _TimelineZoomSlider(
-                zoom: _zoom,
-                onChanged: (value) {
-                  setState(() => _zoom = value);
-                },
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                  child: SizedBox(
+                    height: height + 24,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTapDown: (details) {
+                              final seconds =
+                                  (details.localPosition.dy / pixelsPerSecond)
+                                      .round()
+                                      .clamp(0, total);
+                              _addRetrospectiveEvent(
+                                context,
+                                start.add(Duration(seconds: seconds)),
+                              );
+                            },
+                          ),
+                        ),
+                        _TimelineScaleRuler(
+                          start: start,
+                          height: height,
+                          totalSeconds: total,
+                          pixelsPerSecond: pixelsPerSecond,
+                          majorInterval: _scale.duration,
+                        ),
+                        for (int i = 0; i < widget.segments.length; i++)
+                          _TimelineEventBlock(
+                            state: widget.state,
+                            segment: widget.segments[i],
+                            top: widget.segments[i].startAt
+                                    .difference(start)
+                                    .inSeconds *
+                                pixelsPerSecond,
+                            height: math.max(
+                              6,
+                              (widget.segments[i].endAt ?? widget.state.now)
+                                      .difference(widget.segments[i].startAt)
+                                      .inSeconds *
+                                  pixelsPerSecond,
+                            ),
+                            totalSeconds: eventTotal,
+                            onEditRequested: () =>
+                                _editEvent(context, widget.segments[i]),
+                            onDeleteRequested: () => _confirmDeleteEvent(
+                              context,
+                              widget.segments[i],
+                            ),
+                          ),
+                        for (int i = 0; i < widget.segments.length - 1; i++)
+                          _TimelineBoundaryHandle(
+                            top: ((_pendingBoundaryAt != null &&
+                                            _draggingBoundaryIndex == i
+                                        ? _pendingBoundaryAt!
+                                        : widget.segments[i].endAt ??
+                                            widget.segments[i + 1].startAt)
+                                    .difference(start)
+                                    .inSeconds *
+                                pixelsPerSecond),
+                            label: _formatTime(
+                              _pendingBoundaryAt != null &&
+                                      _draggingBoundaryIndex == i
+                                  ? _pendingBoundaryAt!
+                                  : widget.segments[i].endAt ??
+                                      widget.segments[i + 1].startAt,
+                            ),
+                            onDragStart: () {
+                              setState(() {
+                                _draggingBoundaryIndex = i;
+                                _pendingBoundaryAt = widget.segments[i].endAt ??
+                                    widget.segments[i + 1].startAt;
+                              });
+                            },
+                            onDragUpdate: (details) {
+                              final current = _pendingBoundaryAt ??
+                                  widget.segments[i].endAt ??
+                                  widget.segments[i + 1].startAt;
+                              final secondsDelta =
+                                  (details.delta.dy / pixelsPerSecond).round();
+                              final raw = current.add(
+                                Duration(seconds: secondsDelta),
+                              );
+                              final min = widget.segments[i].startAt.add(
+                                const Duration(seconds: 1),
+                              );
+                              final max = (widget.segments[i + 1].endAt ??
+                                      widget.state.now)
+                                  .subtract(const Duration(seconds: 1));
+                              setState(() {
+                                _pendingBoundaryAt = _clampDateTime(
+                                  raw,
+                                  min,
+                                  max,
+                                );
+                              });
+                            },
+                            onDragEnd: () {
+                              final boundaryAt = _pendingBoundaryAt;
+                              setState(() {
+                                _draggingBoundaryIndex = null;
+                                _pendingBoundaryAt = null;
+                              });
+                              if (boundaryAt == null) {
+                                return;
+                              }
+                              context.read<SessionDetailBloc>().add(
+                                    SessionDetailSegmentBoundaryMoved(
+                                      previousSegmentId: widget.segments[i].id,
+                                      nextSegmentId: widget.segments[i + 1].id,
+                                      boundaryAt: boundaryAt,
+                                    ),
+                                  );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -1765,6 +2202,27 @@ class _VisualSessionTimelineState extends State<_VisualSessionTimeline> {
           );
     }
   }
+
+  Future<void> _editEvent(BuildContext context, TimeSegment segment) async {
+    final result = await showDialog<_SegmentTimeEditResult>(
+      context: context,
+      builder: (_) => _SegmentTimeEditDialog(
+        segment: segment,
+        now: widget.state.now,
+      ),
+    );
+    if (result == null || !context.mounted) {
+      return;
+    }
+
+    context.read<SessionDetailBloc>().add(
+          SessionDetailSegmentUpdated(
+            segmentId: segment.id,
+            startAt: result.startAt,
+            endAt: result.endAt,
+          ),
+        );
+  }
 }
 
 class _TimelineEventBlock extends StatelessWidget {
@@ -1772,6 +2230,8 @@ class _TimelineEventBlock extends StatelessWidget {
   final TimeSegment segment;
   final double top;
   final double height;
+  final int totalSeconds;
+  final VoidCallback onEditRequested;
   final VoidCallback onDeleteRequested;
 
   const _TimelineEventBlock({
@@ -1779,11 +2239,19 @@ class _TimelineEventBlock extends StatelessWidget {
     required this.segment,
     required this.top,
     required this.height,
+    required this.totalSeconds,
+    required this.onEditRequested,
     required this.onDeleteRequested,
   });
 
   @override
   Widget build(BuildContext context) {
+    final eventSeconds = math.max(
+      1,
+      (segment.endAt ?? state.now).difference(segment.startAt).inSeconds,
+    );
+    final percent = (eventSeconds / math.max(1, totalSeconds) * 100).round();
+
     if (segment.isPause) {
       return Positioned(
         left: 112,
@@ -1792,32 +2260,32 @@ class _TimelineEventBlock extends StatelessWidget {
         height: height,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onTap: onEditRequested,
           onLongPress: onDeleteRequested,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              border: Border.symmetric(
-                horizontal: BorderSide(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outline
-                      .withValues(alpha: 0.20),
-                ),
+              color: Colors.white.withValues(alpha: 0.035),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.10),
               ),
             ),
-            child: Center(
-              child: Text(
-                'Pause',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.42),
-                      fontWeight: FontWeight.w900,
+            child: height < 24
+                ? const SizedBox.shrink()
+                : Center(
+                    child: Text(
+                      'Pause',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.42),
+                            fontWeight: FontWeight.w900,
+                          ),
                     ),
-              ),
-            ),
+                  ),
           ),
         ),
       );
@@ -1836,56 +2304,87 @@ class _TimelineEventBlock extends StatelessWidget {
       height: height,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () {},
+        onTap: onEditRequested,
         onLongPress: onDeleteRequested,
-        child: DecoratedBox(
+        child: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+            gradient: RadialGradient(
+              center: const Alignment(-0.78, -0.82),
+              radius: 1.28,
               colors: [
-                ColorUtils.lighten(baseColor, 0.12),
-                baseColor,
-                ColorUtils.darken(baseColor, 0.16),
+                ColorUtils.lighten(baseColor, 0.18).withValues(alpha: 0.94),
+                baseColor.withValues(alpha: 0.74),
+                ColorUtils.darken(baseColor, 0.34).withValues(alpha: 0.92),
               ],
             ),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compact = constraints.maxHeight < 48;
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _segmentTitle(state, segment),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: foreground,
-                        fontSize: compact ? 13 : null,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    if (!compact)
-                      Text(
-                        '${_formatTime(segment.startAt)} - '
-                        '${segment.endAt == null ? 'now' : _formatTime(segment.endAt!)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: foreground.withValues(alpha: 0.74),
-                        ),
-                      ),
-                  ],
-                );
-              },
+            borderRadius: BorderRadius.circular(height < 16 ? 4 : 9),
+            border: Border.all(
+              color:
+                  ColorUtils.lighten(baseColor, 0.18).withValues(alpha: 0.78),
             ),
+            boxShadow: height < 16
+                ? null
+                : [
+                    BoxShadow(
+                      color: baseColor.withValues(alpha: 0.20),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
           ),
+          child: height < 28
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxHeight < 62;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${_formatTime(segment.startAt)} - '
+                                  '${segment.endAt == null ? 'now' : _formatTime(segment.endAt!)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: foreground.withValues(alpha: 0.86),
+                                    fontSize: compact ? 12 : 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '$percent%',
+                                style: TextStyle(
+                                  color: foreground.withValues(alpha: 0.72),
+                                  fontSize: compact ? 12 : 14,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (!compact) const SizedBox(height: 8),
+                          if (!compact)
+                            Text(
+                              _segmentTitle(state, segment),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: foreground,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
         ),
       ),
     );
@@ -1897,24 +2396,28 @@ class _TimelineScaleRuler extends StatelessWidget {
   final double height;
   final int totalSeconds;
   final double pixelsPerSecond;
+  final Duration majorInterval;
 
   const _TimelineScaleRuler({
     required this.start,
     required this.height,
     required this.totalSeconds,
     required this.pixelsPerSecond,
+    required this.majorInterval,
   });
 
   @override
   Widget build(BuildContext context) {
-    final interval = _intervalForScale(pixelsPerSecond);
-    final tickCount = (totalSeconds / interval.inSeconds).ceil();
+    final minorInterval = Duration(
+      seconds: math.max(60, majorInterval.inSeconds ~/ 2),
+    );
+    final tickCount = (totalSeconds / minorInterval.inSeconds).ceil();
 
     return Positioned(
       left: 0,
       top: 0,
       bottom: 0,
-      width: 104,
+      right: 0,
       child: Stack(
         children: [
           Positioned(
@@ -1930,27 +2433,16 @@ class _TimelineScaleRuler extends StatelessWidget {
           ),
           for (int i = 0; i <= tickCount; i++)
             _TimelineScaleTick(
-              top: math.min(height, i * interval.inSeconds * pixelsPerSecond),
-              label: _formatTime(start.add(interval * i)),
+              top: math.min(
+                height,
+                i * minorInterval.inSeconds * pixelsPerSecond,
+              ),
+              label: _formatTime(start.add(minorInterval * i)),
               isMajor: i.isEven,
             ),
         ],
       ),
     );
-  }
-
-  Duration _intervalForScale(double pixelsPerSecond) {
-    final pixelsPerMinute = pixelsPerSecond * 60;
-    if (pixelsPerMinute >= 24) {
-      return const Duration(minutes: 5);
-    }
-    if (pixelsPerMinute >= 10) {
-      return const Duration(minutes: 15);
-    }
-    if (pixelsPerMinute >= 4) {
-      return const Duration(minutes: 30);
-    }
-    return const Duration(hours: 1);
   }
 }
 
@@ -1980,17 +2472,41 @@ class _TimelineScaleTick extends StatelessWidget {
                 ? Text(
                     label,
                     textAlign: TextAlign.right,
-                    style: Theme.of(context).textTheme.labelMedium,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.88),
+                          fontWeight: FontWeight.w700,
+                        ),
                   )
-                : const SizedBox.shrink(),
+                : Text(
+                    ':${label.substring(3)}',
+                    textAlign: TextAlign.right,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.42),
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
           ),
           const SizedBox(width: 8),
           Container(
             width: isMajor ? 18 : 10,
-            height: 2,
-            color: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: isMajor ? 0.74 : 0.32),
+            height: 1.4,
+            color: Colors.white.withValues(alpha: isMajor ? 0.46 : 0.24),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.white.withValues(
+                      alpha: isMajor ? 0.14 : 0.08,
+                    ),
+                    style: BorderStyle.solid,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -2044,16 +2560,12 @@ class _TimelineBoundaryHandle extends StatelessWidget {
     return Positioned(
       left: 0,
       right: 0,
-      top: top - 16,
-      height: 32,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragStart: (_) => onDragStart(),
-        onVerticalDragUpdate: onDragUpdate,
-        onVerticalDragEnd: (_) => onDragEnd(),
-        child: Row(
-          children: [
-            SizedBox(
+      top: top - 22,
+      height: 44,
+      child: Row(
+        children: [
+          IgnorePointer(
+            child: SizedBox(
               width: 76,
               child: Text(
                 label,
@@ -2061,112 +2573,44 @@ class _TimelineBoundaryHandle extends StatelessWidget {
                 style: Theme.of(context).textTheme.labelMedium,
               ),
             ),
-            const SizedBox(width: 8),
-            Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                shape: BoxShape.circle,
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragStart: (_) => onDragStart(),
+                onVerticalDragUpdate: onDragUpdate,
+                onVerticalDragEnd: (_) => onDragEnd(),
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: IgnorePointer(
               child: Container(
                 height: 2,
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _TimelineZoomSlider extends StatelessWidget {
-  final double zoom;
-  final ValueChanged<double> onChanged;
-
-  const _TimelineZoomSlider({required this.zoom, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colorScheme.surface.withValues(alpha: 0.78),
-            borderRadius: const BorderRadius.horizontal(
-              right: Radius.circular(999),
-            ),
-            border: Border(
-              top: BorderSide(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-              ),
-              right: BorderSide(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-              ),
-              bottom: BorderSide(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-              ),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              Icon(
-                Icons.add,
-                size: 16,
-                color: colorScheme.onSurface.withValues(alpha: 0.72),
-              ),
-              Expanded(
-                child: RotatedBox(
-                  quarterTurns: -1,
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 7,
-                      ),
-                      overlayShape: const RoundSliderOverlayShape(
-                        overlayRadius: 16,
-                      ),
-                    ),
-                    child: Slider(
-                      min: 0.72,
-                      max: 4,
-                      value: zoom.clamp(0.72, 4).toDouble(),
-                      onChanged: onChanged,
-                    ),
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.remove,
-                size: 16,
-                color: colorScheme.onSurface.withValues(alpha: 0.72),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-enum _AnalyticsScope { overview, activities, modes }
+enum _AnalyticsTab { balance, flow, focus }
 
 class _SessionAnalytics extends StatefulWidget {
   final SessionDetailLoaded state;
@@ -2182,7 +2626,8 @@ class _SessionAnalyticsState extends State<_SessionAnalytics>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _animation;
-  _AnalyticsScope _scope = _AnalyticsScope.overview;
+  _AnalyticsTab _tab = _AnalyticsTab.balance;
+  final Set<String> _expandedActivityIds = {};
 
   @override
   void initState() {
@@ -2217,73 +2662,71 @@ class _SessionAnalyticsState extends State<_SessionAnalytics>
   @override
   Widget build(BuildContext context) {
     final data = _analyticsData(widget.state, widget.segments);
-    if (data.activityRows.isEmpty) {
+    if (data.activities.isEmpty) {
       return const Center(child: Text('No activity time yet'));
     }
 
-    final visibleRows = switch (_scope) {
-      _AnalyticsScope.overview => data.activityRows.take(5).toList(),
-      _AnalyticsScope.activities => data.activityRows,
-      _AnalyticsScope.modes => data.modeRows,
-    };
-    final chartRows =
-        _scope == _AnalyticsScope.modes ? data.modeRows : data.activityRows;
-    final visibleTotalSeconds = math.max(
+    final totalSeconds = math.max(
       1,
-      visibleRows.fold<int>(0, (total, row) => total + row.duration.inSeconds),
-    );
-    final chartTotalSeconds = math.max(
-      1,
-      chartRows.fold<int>(0, (total, row) => total + row.duration.inSeconds),
+      data.activities.fold<int>(
+        0,
+        (total, row) => total + row.duration.inSeconds,
+      ),
     );
 
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, _) {
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 34),
           children: [
-            _AnalyticsScopeSelector(
-              value: _scope,
-              onChanged: (scope) {
-                setState(() => _scope = scope);
+            _AnalyticsTabSelector(
+              value: _tab,
+              onChanged: (tab) {
+                setState(() => _tab = tab);
                 _controller
                   ..reset()
                   ..forward();
               },
             ),
-            const SizedBox(height: 16),
-            _AnalyticsHeroPanel(
-              rows: chartRows,
-              totalDuration: data.totalDuration,
-              pauseDuration: data.pauseDuration,
-              progress: _animation.value,
-              totalSeconds: chartTotalSeconds,
-              title: _scope == _AnalyticsScope.modes
-                  ? 'Modes breakdown'
-                  : 'Activity balance',
-            ),
-            const SizedBox(height: 18),
-            _AnalyticsSectionHeader(
-              title: switch (_scope) {
-                _AnalyticsScope.overview => 'Top activities',
-                _AnalyticsScope.activities => 'Activities',
-                _AnalyticsScope.modes => 'Modes',
-              },
-              subtitle: switch (_scope) {
-                _AnalyticsScope.overview => 'Largest contributors',
-                _AnalyticsScope.activities => 'Grouped by activity',
-                _AnalyticsScope.modes => 'Grouped by activity mode',
-              },
-            ),
-            const SizedBox(height: 10),
-            for (var index = 0; index < visibleRows.length; index++)
-              _AnimatedAnalyticsRow(
-                row: visibleRows[index],
-                percent:
-                    visibleRows[index].duration.inSeconds / visibleTotalSeconds,
-                animationValue: _rowProgress(index, _animation.value),
+            const SizedBox(height: 22),
+            if (_tab == _AnalyticsTab.balance) ...[
+              _AnalyticsBalanceChart(
+                rows: data.activities,
+                totalDuration: data.totalDuration,
+                progress: _animation.value,
+                totalSeconds: totalSeconds,
               ),
+              const SizedBox(height: 22),
+              for (var index = 0; index < data.activities.length; index++)
+                _AnalyticsActivityCard(
+                  row: data.activities[index],
+                  totalSeconds: totalSeconds,
+                  expanded: _expandedActivityIds.contains(
+                    data.activities[index].id,
+                  ),
+                  animationValue: _rowProgress(index, _animation.value),
+                  onToggle: () {
+                    setState(() {
+                      final id = data.activities[index].id;
+                      if (!_expandedActivityIds.remove(id)) {
+                        _expandedActivityIds.add(id);
+                      }
+                    });
+                  },
+                ),
+              const SizedBox(height: 12),
+              Center(
+                child: Text(
+                  'Percentages may not add up to 100% due to rounding.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ] else
+              _AnalyticsComingSoon(tab: _tab),
           ],
         );
       },
@@ -2299,8 +2742,7 @@ class _SessionAnalyticsState extends State<_SessionAnalytics>
     SessionDetailLoaded state,
     List<TimeSegment> segments,
   ) {
-    final activityTotals = <String, _AnalyticsRow>{};
-    final modeTotals = <String, _AnalyticsRow>{};
+    final activityTotals = <String, _MutableAnalyticsActivity>{};
     var pauseDuration = Duration.zero;
 
     for (final segment in segments) {
@@ -2310,31 +2752,52 @@ class _SessionAnalyticsState extends State<_SessionAnalytics>
       }
 
       final duration = segment.durationUntil(state.now);
-      final activityExisting = activityTotals[segment.trackableId];
-      activityTotals[segment.trackableId] = _AnalyticsRow(
-        title: _trackableName(state, segment.trackableId),
-        subtitle: 'Activity',
-        color: _trackableColor(state, segment.trackableId),
-        duration: (activityExisting?.duration ?? Duration.zero) + duration,
+      final activity = activityTotals.putIfAbsent(
+        segment.trackableId,
+        () => _MutableAnalyticsActivity(
+          id: segment.trackableId,
+          title: _trackableName(state, segment.trackableId),
+          color: _trackableColor(state, segment.trackableId),
+        ),
       );
+      activity.duration += duration;
 
       final modeKey = '${segment.trackableId}:${segment.modeId}';
-      final modeExisting = modeTotals[modeKey];
       final modeName = _modeName(state, segment.trackableId, segment.modeId);
-      modeTotals[modeKey] = _AnalyticsRow(
-        title: modeName == TrackableMode.mainName ? 'main' : modeName,
-        subtitle: _trackableName(state, segment.trackableId),
-        color: _analyticsModeColor(
-          _trackableColor(state, segment.trackableId),
-          segment.modeId,
+      final mode = activity.modes.putIfAbsent(
+        modeKey,
+        () => _MutableAnalyticsMode(
+          id: modeKey,
+          title: modeName == TrackableMode.mainName ? 'main' : modeName,
+          color: _analyticsModeColor(
+            _trackableColor(state, segment.trackableId),
+            segment.modeId,
+          ),
         ),
-        duration: (modeExisting?.duration ?? Duration.zero) + duration,
       );
+      mode.duration += duration;
     }
 
-    final activityRows = activityTotals.values.toList()
-      ..sort((a, b) => b.duration.compareTo(a.duration));
-    final modeRows = modeTotals.values.toList()
+    final activityRows = activityTotals.values.map((activity) {
+      final modes = activity.modes.values
+          .map(
+            (mode) => _AnalyticsModeRow(
+              id: mode.id,
+              title: mode.title,
+              color: mode.color,
+              duration: mode.duration,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => b.duration.compareTo(a.duration));
+      return _AnalyticsActivityRow(
+        id: activity.id,
+        title: activity.title,
+        color: activity.color,
+        duration: activity.duration,
+        modes: modes,
+      );
+    }).toList()
       ..sort((a, b) => b.duration.compareTo(a.duration));
     final totalDuration = activityRows.fold<Duration>(
       Duration.zero,
@@ -2342,8 +2805,7 @@ class _SessionAnalyticsState extends State<_SessionAnalytics>
     );
 
     return _AnalyticsData(
-      activityRows: activityRows,
-      modeRows: modeRows,
+      activities: activityRows,
       totalDuration: totalDuration,
       pauseDuration: pauseDuration,
     );
@@ -2359,280 +2821,420 @@ class _SessionAnalyticsState extends State<_SessionAnalytics>
 }
 
 class _AnalyticsData {
-  final List<_AnalyticsRow> activityRows;
-  final List<_AnalyticsRow> modeRows;
+  final List<_AnalyticsActivityRow> activities;
   final Duration totalDuration;
   final Duration pauseDuration;
 
   const _AnalyticsData({
-    required this.activityRows,
-    required this.modeRows,
+    required this.activities,
     required this.totalDuration,
     required this.pauseDuration,
   });
 }
 
-class _AnalyticsRow {
+class _MutableAnalyticsActivity {
+  final String id;
   final String title;
-  final String subtitle;
+  final Color color;
+  final Map<String, _MutableAnalyticsMode> modes = {};
+  Duration duration = Duration.zero;
+
+  _MutableAnalyticsActivity({
+    required this.id,
+    required this.title,
+    required this.color,
+  });
+}
+
+class _MutableAnalyticsMode {
+  final String id;
+  final String title;
+  final Color color;
+  Duration duration = Duration.zero;
+
+  _MutableAnalyticsMode({
+    required this.id,
+    required this.title,
+    required this.color,
+  });
+}
+
+class _AnalyticsActivityRow {
+  final String id;
+  final String title;
+  final Color color;
+  final Duration duration;
+  final List<_AnalyticsModeRow> modes;
+
+  const _AnalyticsActivityRow({
+    required this.id,
+    required this.title,
+    required this.color,
+    required this.duration,
+    required this.modes,
+  });
+}
+
+class _AnalyticsModeRow {
+  final String id;
+  final String title;
   final Color color;
   final Duration duration;
 
-  const _AnalyticsRow({
+  const _AnalyticsModeRow({
+    required this.id,
     required this.title,
-    required this.subtitle,
     required this.color,
     required this.duration,
   });
 }
 
-class _AnalyticsScopeSelector extends StatelessWidget {
-  final _AnalyticsScope value;
-  final ValueChanged<_AnalyticsScope> onChanged;
+class _AnalyticsTabSelector extends StatelessWidget {
+  final _AnalyticsTab value;
+  final ValueChanged<_AnalyticsTab> onChanged;
 
-  const _AnalyticsScopeSelector({
+  const _AnalyticsTabSelector({
     required this.value,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<_AnalyticsScope>(
-      segments: const [
-        ButtonSegment(
-          value: _AnalyticsScope.overview,
-          label: Text('Overview'),
-          icon: Icon(Icons.auto_graph),
-        ),
-        ButtonSegment(
-          value: _AnalyticsScope.activities,
-          label: Text('Activities'),
-          icon: Icon(Icons.layers),
-        ),
-        ButtonSegment(
-          value: _AnalyticsScope.modes,
-          label: Text('Modes'),
-          icon: Icon(Icons.tune),
-        ),
-      ],
-      selected: {value},
-      showSelectedIcon: false,
-      onSelectionChanged: (selected) => onChanged(selected.single),
-    );
-  }
-}
-
-class _AnalyticsHeroPanel extends StatelessWidget {
-  final List<_AnalyticsRow> rows;
-  final Duration totalDuration;
-  final Duration pauseDuration;
-  final double progress;
-  final int totalSeconds;
-  final String title;
-
-  const _AnalyticsHeroPanel({
-    required this.rows,
-    required this.totalDuration,
-    required this.pauseDuration,
-    required this.progress,
-    required this.totalSeconds,
-    required this.title,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    const tabs = [
+      (_AnalyticsTab.balance, 'Balance'),
+      (_AnalyticsTab.flow, 'Flow'),
+      (_AnalyticsTab.focus, 'Focus'),
+    ];
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorScheme.surface.withValues(alpha: 0.76),
-            colorScheme.primary.withValues(alpha: 0.10),
-            colorScheme.tertiary.withValues(alpha: 0.10),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.22),
-        ),
+        color: const Color(0xFF07111F).withValues(alpha: 0.70),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            _AnalyticsDonutChart(
-              rows: rows,
-              progress: progress,
-              totalSeconds: totalSeconds,
-            ),
-            const SizedBox(width: 18),
+      child: Row(
+        children: [
+          for (final tab in tabs)
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
+              child: InkWell(
+                onTap: () => onChanged(tab.$1),
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 54,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Text(
+                        tab.$2,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: value == tab.$1
+                                  ? const Color(0xFFB05CFF)
+                                  : Colors.white.withValues(alpha: 0.52),
+                              fontWeight: FontWeight.w900,
+                            ),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        width: 84,
+                        height: 4,
+                        child: AnimatedOpacity(
+                          opacity: value == tab.$1 ? 1 : 0,
+                          duration: const Duration(milliseconds: 160),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFB05CFF),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
                         ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    TimeFormatUtil.formatDuration(totalDuration),
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0,
-                        ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    pauseDuration.inSeconds == 0
-                        ? 'No pauses'
-                        : 'Pause excluded: ${TimeFormatUtil.formatDuration(pauseDuration)}',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: colorScheme.onSurface.withValues(alpha: 0.58),
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
 
-class _AnalyticsSectionHeader extends StatelessWidget {
-  final String title;
-  final String subtitle;
+class _AnalyticsBalanceChart extends StatelessWidget {
+  final List<_AnalyticsActivityRow> rows;
+  final Duration totalDuration;
+  final double progress;
+  final int totalSeconds;
 
-  const _AnalyticsSectionHeader({
-    required this.title,
-    required this.subtitle,
+  const _AnalyticsBalanceChart({
+    required this.rows,
+    required this.totalDuration,
+    required this.progress,
+    required this.totalSeconds,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w900,
+    return SizedBox(
+      height: 360,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          _AnalyticsDonutChart(
+            rows: rows,
+            progress: progress,
+            totalSeconds: totalSeconds,
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Total time',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.58),
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
-        ),
-        Text(
-          subtitle,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.52),
-                fontWeight: FontWeight.w700,
+              const SizedBox(height: 8),
+              Text(
+                TimeFormatUtil.formatDuration(totalDuration),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.94),
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0,
+                    ),
               ),
-        ),
-      ],
+              const SizedBox(height: 6),
+              Text(
+                '100% of session',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.52),
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+          for (var index = 0; index < math.min(rows.length, 5); index++)
+            _AnalyticsChartCallout(
+              row: rows[index],
+              totalSeconds: totalSeconds,
+              index: index,
+            ),
+        ],
+      ),
     );
   }
 }
 
-class _AnimatedAnalyticsRow extends StatelessWidget {
-  final _AnalyticsRow row;
-  final double percent;
-  final double animationValue;
+class _AnalyticsChartCallout extends StatelessWidget {
+  final _AnalyticsActivityRow row;
+  final int totalSeconds;
+  final int index;
 
-  const _AnimatedAnalyticsRow({
+  const _AnalyticsChartCallout({
     required this.row,
-    required this.percent,
+    required this.totalSeconds,
+    required this.index,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final positions = <Alignment>[
+      Alignment.topRight,
+      Alignment.centerRight,
+      Alignment.bottomRight,
+      Alignment.bottomLeft,
+      Alignment.centerLeft,
+    ];
+    final align = positions[index % positions.length];
+    final percent = row.duration.inSeconds / totalSeconds;
+    return Align(
+      alignment: align,
+      child: SizedBox(
+        width: 118,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment:
+              align.x < 0 ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+          children: [
+            Text(
+              _formatAnalyticsPercent(percent),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: row.color,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              row.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.90),
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            Text(
+              TimeFormatUtil.formatDuration(row.duration),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.58),
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsActivityCard extends StatelessWidget {
+  final _AnalyticsActivityRow row;
+  final int totalSeconds;
+  final bool expanded;
+  final double animationValue;
+  final VoidCallback onToggle;
+
+  const _AnalyticsActivityCard({
+    required this.row,
+    required this.totalSeconds,
+    required this.expanded,
     required this.animationValue,
+    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
     final curved = Curves.easeOutCubic.transform(animationValue);
-    final percentLabel =
-        '${(percent * 100).toStringAsFixed(percent < 0.1 ? 1 : 0)}%';
-
+    final percent = row.duration.inSeconds / totalSeconds;
     return Opacity(
       opacity: curved,
       child: Transform.translate(
         offset: Offset(0, 14 * (1 - curved)),
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: SizedBox(
-            height: 64,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surface
-                              .withValues(alpha: 0.38),
+          padding: const EdgeInsets.only(bottom: 12),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFF07111F).withValues(alpha: 0.74),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 5,
+                    child: ColoredBox(color: row.color),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 12, 14),
+                    child: Column(
+                      children: [
+                        InkWell(
+                          onTap: onToggle,
                           borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: constraints.maxWidth *
-                          percent.clamp(0.0, 1.0) *
-                          curved,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              row.color.withValues(alpha: 0.34),
-                              row.color.withValues(alpha: 0.12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 7,
+                                child: Text(
+                                  row.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.94),
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 92,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    TimeFormatUtil.formatDuration(row.duration),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    textAlign: TextAlign.end,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.68),
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 54,
+                                child: Text(
+                                  _formatAnalyticsPercent(percent),
+                                  textAlign: TextAlign.end,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.68),
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 86,
+                                child: _AnalyticsProgressBar(
+                                  color: row.color,
+                                  value: percent,
+                                ),
+                              ),
+                              Icon(
+                                expanded
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                                color: Colors.white.withValues(alpha: 0.68),
+                              ),
                             ],
                           ),
-                          borderRadius: BorderRadius.circular(10),
                         ),
-                      ),
-                    ),
-                    ListTile(
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 10),
-                      leading: _EventColorMark(color: row.color),
-                      title: Text(
-                        row.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                      subtitle: Text(
-                        row.subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            percentLabel,
-                            style: const TextStyle(fontWeight: FontWeight.w900),
+                        AnimatedCrossFade(
+                          firstChild: const SizedBox.shrink(),
+                          secondChild: Padding(
+                            padding: const EdgeInsets.only(top: 14),
+                            child: Column(
+                              children: [
+                                for (final mode in row.modes)
+                                  _AnalyticsModeLine(
+                                    row: mode,
+                                    totalSeconds: math.max(
+                                      1,
+                                      row.duration.inSeconds,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                          Text(
-                            TimeFormatUtil.formatDuration(row.duration),
-                            style: Theme.of(context).textTheme.labelMedium,
-                          ),
-                        ],
-                      ),
+                          crossFadeState: expanded
+                              ? CrossFadeState.showSecond
+                              : CrossFadeState.showFirst,
+                          duration: const Duration(milliseconds: 180),
+                        ),
+                      ],
                     ),
-                  ],
-                );
-              },
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2641,8 +3243,140 @@ class _AnimatedAnalyticsRow extends StatelessWidget {
   }
 }
 
+class _AnalyticsModeLine extends StatelessWidget {
+  final _AnalyticsModeRow row;
+  final int totalSeconds;
+
+  const _AnalyticsModeLine({required this.row, required this.totalSeconds});
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = row.duration.inSeconds / totalSeconds;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(Icons.circle, size: 9, color: row.color),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 6,
+            child: Text(
+              row.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          SizedBox(
+            width: 86,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                TimeFormatUtil.formatDuration(row.duration),
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.end,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.64),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0,
+                    ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          SizedBox(
+            width: 86,
+            child: _AnalyticsProgressBar(color: row.color, value: percent),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text(
+              _formatAnalyticsPercent(percent),
+              textAlign: TextAlign.end,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.64),
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsProgressBar extends StatelessWidget {
+  final Color color;
+  final double value;
+
+  const _AnalyticsProgressBar({required this.color, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: SizedBox(
+        height: 8,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: Colors.white.withValues(alpha: 0.07)),
+            FractionallySizedBox(
+              widthFactor: value.clamp(0.0, 1.0),
+              alignment: Alignment.centerLeft,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      ColorUtils.lighten(color, 0.10),
+                      color,
+                      ColorUtils.darken(color, 0.08),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsComingSoon extends StatelessWidget {
+  final _AnalyticsTab tab;
+
+  const _AnalyticsComingSoon({required this.tab});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = switch (tab) {
+      _AnalyticsTab.balance => 'Balance',
+      _AnalyticsTab.flow => 'Flow',
+      _AnalyticsTab.focus => 'Focus',
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 80),
+      child: Center(
+        child: Text(
+          '$title analytics coming soon',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Colors.white.withValues(alpha: 0.58),
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AnalyticsDonutChart extends StatelessWidget {
-  final List<_AnalyticsRow> rows;
+  final List<_AnalyticsActivityRow> rows;
   final double progress;
   final int totalSeconds;
 
@@ -2659,7 +3393,7 @@ class _AnalyticsDonutChart extends StatelessWidget {
     }
 
     return SizedBox.square(
-      dimension: 118,
+      dimension: 240,
       child: CustomPaint(
         painter: _AnalyticsDonutPainter(
           rows: rows,
@@ -2676,7 +3410,7 @@ class _AnalyticsDonutChart extends StatelessWidget {
 }
 
 class _AnalyticsDonutPainter extends CustomPainter {
-  final List<_AnalyticsRow> rows;
+  final List<_AnalyticsActivityRow> rows;
   final double progress;
   final Color backgroundColor;
   final int totalSeconds;
@@ -2690,37 +3424,32 @@ class _AnalyticsDonutPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final strokeWidth = size.shortestSide * 0.16;
+    final strokeWidth = size.shortestSide * 0.15;
     final rect = Offset(strokeWidth / 2, strokeWidth / 2) &
         Size(size.width - strokeWidth, size.height - strokeWidth);
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
+      ..strokeCap = StrokeCap.butt
       ..color = backgroundColor;
     canvas.drawArc(rect, -math.pi / 2, math.pi * 2, false, paint);
 
     var startAngle = -math.pi / 2;
-    var remainingProgress = progress.clamp(0.0, 1.0);
+    var remainingSweep = math.pi * 2 * progress.clamp(0.0, 1.0);
+    final gap = rows.length > 1 ? 0.028 : 0.0;
 
     for (final row in rows) {
       final ratio = row.duration.inSeconds / totalSeconds;
       final sweep = ratio * math.pi * 2;
-      final visibleSweep = sweep * remainingProgress.clamp(0.0, 1.0);
-      if (visibleSweep <= 0) {
+      final drawableSweep = math.max(0.0, sweep - gap);
+      final visibleSweep = math.min(drawableSweep, remainingSweep);
+      if (visibleSweep <= 0.001) {
         break;
       }
-      paint.shader = RadialGradient(
-        colors: [
-          ColorUtils.lighten(row.color, 0.12),
-          row.color,
-          ColorUtils.darken(row.color, 0.12),
-        ],
-      ).createShader(rect);
+      paint.color = row.color;
       canvas.drawArc(rect, startAngle, visibleSweep, false, paint);
-      paint.shader = null;
       startAngle += sweep;
-      remainingProgress -= ratio;
+      remainingSweep -= sweep;
     }
   }
 
@@ -2731,6 +3460,11 @@ class _AnalyticsDonutPainter extends CustomPainter {
         oldDelegate.backgroundColor != backgroundColor ||
         oldDelegate.totalSeconds != totalSeconds;
   }
+}
+
+String _formatAnalyticsPercent(double value) {
+  final percent = value * 100;
+  return '${percent.toStringAsFixed(percent < 10 ? 1 : 0)}%';
 }
 
 class _RetrospectiveEventDialog extends StatefulWidget {
@@ -3171,6 +3905,8 @@ class _SessionTrackablesList extends StatelessWidget {
       onLongPressStart;
   final ValueChanged<Offset> onLongPressMove;
   final ValueChanged<Offset> onLongPressEnd;
+  final void Function(String trackableId, String modeId, Offset globalPosition)
+      onMenuTap;
 
   const _SessionTrackablesList({
     required this.state,
@@ -3178,6 +3914,7 @@ class _SessionTrackablesList extends StatelessWidget {
     required this.onLongPressStart,
     required this.onLongPressMove,
     required this.onLongPressEnd,
+    required this.onMenuTap,
   });
 
   @override
@@ -3191,8 +3928,9 @@ class _SessionTrackablesList extends StatelessWidget {
       );
     }
 
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
     return ListView.separated(
-      padding: EdgeInsets.zero,
+      padding: EdgeInsets.only(bottom: safeBottom + 116),
       itemCount: state.trackables.length,
       separatorBuilder: (_, __) => Divider(
         height: 1,
@@ -3209,12 +3947,7 @@ class _SessionTrackablesList extends StatelessWidget {
           trackable: trackable,
           isActive: isActive,
           onModeTap: (modeId) {
-            context.read<SessionDetailBloc>().add(
-                  SessionDetailTrackableSelected(
-                    trackableId: trackable.id,
-                    modeId: modeId,
-                  ),
-                );
+            _selectTrackable(context, trackable.id, modeId);
           },
           onLongPressStart: (modeId, globalPosition) {
             onLongPressStart(trackable.id, modeId, globalPosition);
@@ -3225,9 +3958,39 @@ class _SessionTrackablesList extends StatelessWidget {
           onLongPressEnd: (globalPosition) {
             onLongPressEnd(globalPosition);
           },
+          onMenuTap: (modeId, globalPosition) {
+            onMenuTap(trackable.id, modeId, globalPosition);
+          },
         );
       },
     );
+  }
+
+  Future<void> _selectTrackable(
+    BuildContext context,
+    String trackableId,
+    String modeId,
+  ) async {
+    DateTime? startAt;
+    if (state.segments.isEmpty &&
+        state.session.isPaused &&
+        state.session.startedAt == null) {
+      startAt = await showDialog<DateTime>(
+        context: context,
+        builder: (_) => _FirstActivityStartDialog(now: state.now),
+      );
+      if (startAt == null || !context.mounted) {
+        return;
+      }
+    }
+
+    context.read<SessionDetailBloc>().add(
+          SessionDetailTrackableSelected(
+            trackableId: trackableId,
+            modeId: modeId,
+            startAt: startAt,
+          ),
+        );
   }
 }
 
@@ -3240,6 +4003,7 @@ class _TrackableButtonWithLiveTimer extends StatefulWidget {
   final void Function(String modeId, Offset globalPosition) onLongPressStart;
   final ValueChanged<Offset> onLongPressMove;
   final ValueChanged<Offset> onLongPressEnd;
+  final void Function(String modeId, Offset globalPosition) onMenuTap;
 
   const _TrackableButtonWithLiveTimer({
     super.key,
@@ -3251,6 +4015,7 @@ class _TrackableButtonWithLiveTimer extends StatefulWidget {
     required this.onLongPressStart,
     required this.onLongPressMove,
     required this.onLongPressEnd,
+    required this.onMenuTap,
   });
 
   @override
@@ -3307,6 +4072,7 @@ class _TrackableButtonWithLiveTimerState
       onModeLongPressEnd: (_, globalPosition) {
         widget.onLongPressEnd(globalPosition);
       },
+      onModeMenuTap: widget.onMenuTap,
     );
   }
 
@@ -3337,6 +4103,109 @@ class _ComputedDurationListenable extends ChangeNotifier
   void dispose() {
     clock.removeListener(_notify);
     super.dispose();
+  }
+}
+
+class _FirstActivityStartDialog extends StatefulWidget {
+  final DateTime now;
+
+  const _FirstActivityStartDialog({required this.now});
+
+  @override
+  State<_FirstActivityStartDialog> createState() =>
+      _FirstActivityStartDialogState();
+}
+
+class _FirstActivityStartDialogState extends State<_FirstActivityStartDialog> {
+  late DateTime _startAt;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _startAt = widget.now;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Start session'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Start time'),
+            subtitle: Text(_formatDateTime(_startAt)),
+            trailing: const Icon(Icons.schedule),
+            onTap: () => _pickStart(context),
+          ),
+          if (_error != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(DateTime.now()),
+          child: const Text('Now'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Start')),
+      ],
+    );
+  }
+
+  Future<void> _pickStart(BuildContext context) async {
+    final picked = await _pickDateTime(context, _startAt);
+    if (picked == null) {
+      return;
+    }
+    setState(() {
+      _startAt = picked;
+      _error = null;
+    });
+  }
+
+  Future<DateTime?> _pickDateTime(
+    BuildContext context,
+    DateTime initial,
+  ) async {
+    final date = await showDatePicker(
+      context: context,
+      firstDate: DateTime(widget.now.year - 5),
+      lastDate: widget.now,
+      initialDate: initial.isAfter(widget.now) ? widget.now : initial,
+    );
+    if (date == null || !context.mounted) {
+      return null;
+    }
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+    );
+    if (time == null) {
+      return null;
+    }
+
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  void _submit() {
+    if (_startAt.isAfter(DateTime.now())) {
+      setState(() => _error = 'Start time cannot be in the future');
+      return;
+    }
+    Navigator.of(context).pop(_startAt);
   }
 }
 
@@ -3446,18 +4315,6 @@ class _CustomTimeDialogState extends State<_CustomTimeDialog> {
       _endError = 'End time cannot be in the future';
       return false;
     }
-    final intersections = widget.state.segments.where((segment) {
-      final segmentEnd = segment.endAt ?? now;
-      return segment.startAt.isBefore(_endAt) && segmentEnd.isAfter(_startAt);
-    }).length;
-    if (widget.state.segments.isEmpty) {
-      return true;
-    }
-    if (intersections != 1) {
-      _startError = 'Range must be inside one tracked interval';
-      _endError = 'Adjust the end time to fit one interval';
-      return false;
-    }
     return true;
   }
 
@@ -3554,7 +4411,6 @@ class _TrackableEditorDialog extends StatefulWidget {
 class _TrackableEditorDialogState extends State<_TrackableEditorDialog> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _newModeController = TextEditingController();
-  final ScrollController _modesScrollController = ScrollController();
   late String _selectedColor;
   late List<String> _suggestedColors;
   late List<_EditableMode> _modes;
@@ -3579,101 +4435,184 @@ class _TrackableEditorDialogState extends State<_TrackableEditorDialog> {
   void dispose() {
     _nameController.dispose();
     _newModeController.dispose();
-    _modesScrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Edit activity'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
+    return Dialog.fullscreen(
+      backgroundColor: const Color(0xFF050B14),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF08111E), Color(0xFF050B14)],
+          ),
+        ),
+        child: SafeArea(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              const SizedBox(height: 16),
-              Text('Color', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  for (final color in _suggestedColors)
-                    _ColorChoice(
-                      color: ColorUtils.fromHex(color),
-                      isSelected: color == _selectedColor,
-                      onTap: () => setState(() => _selectedColor = color),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+                child: Row(
+                  children: [
+                    _EditorSquareButton(
+                      icon: Icons.close,
+                      onTap: () => Navigator.of(context).pop(false),
                     ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 220,
-                child: ReorderableListView.builder(
-                  scrollController: _modesScrollController,
-                  buildDefaultDragHandles: false,
-                  itemCount: _modes.length,
-                  onReorder: _reorderMode,
-                  itemBuilder: (context, index) {
-                    final mode = _modes[index];
-                    return ListTile(
-                      key: ValueKey(mode.localId),
-                      contentPadding: EdgeInsets.zero,
-                      leading: ReorderableDragStartListener(
-                        index: index,
-                        child: const Icon(Icons.drag_handle),
-                      ),
-                      title: TextFormField(
-                        initialValue: mode.name,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
+                    const Spacer(),
+                    Text(
+                      'Edit activity',
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.95),
+                                fontWeight: FontWeight.w900,
+                              ),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: _save,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF7136D7),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 14,
                         ),
-                        onChanged: (value) => mode.name = value,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      trailing: IconButton(
-                        onPressed: _modes.length <= 1
-                            ? null
-                            : () => setState(() => _modes.removeAt(index)),
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                    );
-                  },
+                      child: const Text('Save'),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _newModeController,
-                      decoration: const InputDecoration(labelText: 'New mode'),
-                      onSubmitted: (_) => _addMode(),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+                  children: [
+                    Text(
+                      'Activity name',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.68),
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
-                  ),
-                  IconButton.filledTonal(
-                    onPressed: _addMode,
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    _EditorNameField(controller: _nameController),
+                    const SizedBox(height: 22),
+                    _EditorPanel(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Color',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.68),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              for (final color in _colorChoices)
+                                _ColorChoice(
+                                  color: ColorUtils.fromHex(color),
+                                  isSelected: color == _selectedColor,
+                                  onTap: () =>
+                                      setState(() => _selectedColor = color),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 26),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'QUICK STATES (CONTEXTS)',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.66),
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.8,
+                                ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _showAddModeDialog,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add quick state'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFC159FF),
+                            textStyle: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _EditorPanel(
+                      padding: EdgeInsets.zero,
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _modes.length,
+                        itemBuilder: (context, index) {
+                          final mode = _modes[index];
+                          return _ModeEditorRow(
+                            key: ValueKey(mode.localId),
+                            mode: mode,
+                            index: index,
+                            color: ColorUtils.fromHex(_selectedColor),
+                            canDelete: _modes.length > 1,
+                            onRename: () => _showRenameModeDialog(mode),
+                            onDelete: () => setState(
+                              () => _modes.removeAt(index),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Center(
+                      child: Text(
+                        'Edit quick state names here',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.54),
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    _ArchiveActivityTile(onTap: _archive),
+                    const SizedBox(height: 18),
+                    _DeleteActivityButton(onTap: _delete),
+                  ],
+                ),
               ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
-      ],
     );
+  }
+
+  List<String> get _colorChoices {
+    final colors = <String>[_selectedColor, ..._suggestedColors];
+    return colors.toSet().take(4).toList();
   }
 
   void _addMode() {
@@ -3685,26 +4624,68 @@ class _TrackableEditorDialogState extends State<_TrackableEditorDialog> {
       _modes.add(_EditableMode.newMode(name));
       _newModeController.clear();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_modesScrollController.hasClients) {
-        return;
-      }
-      _modesScrollController.animateTo(
-        _modesScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      );
-    });
   }
 
-  void _reorderMode(int oldIndex, int newIndex) {
-    setState(() {
-      if (newIndex > oldIndex) {
-        newIndex -= 1;
-      }
-      final mode = _modes.removeAt(oldIndex);
-      _modes.insert(newIndex, mode);
-    });
+  Future<void> _showAddModeDialog() async {
+    _newModeController.clear();
+    final name = await _showModeNameDialog(
+      context: context,
+      title: 'Add quick state',
+      controller: _newModeController,
+    );
+    if (name == null) {
+      return;
+    }
+    _newModeController.text = name;
+    _addMode();
+  }
+
+  Future<void> _showRenameModeDialog(_EditableMode mode) async {
+    final controller = TextEditingController(text: mode.name);
+    final name = await _showModeNameDialog(
+      context: context,
+      title: 'Rename quick state',
+      controller: controller,
+    );
+    controller.dispose();
+    if (name == null) {
+      return;
+    }
+    setState(() => mode.name = name);
+  }
+
+  Future<String?> _showModeNameDialog({
+    required BuildContext context,
+    required String title,
+    required TextEditingController controller,
+  }) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Quick state name'),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    final trimmed = result?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
   }
 
   Future<void> _save() async {
@@ -3771,6 +4752,322 @@ class _TrackableEditorDialogState extends State<_TrackableEditorDialog> {
       Navigator.of(context).pop(true);
     }
   }
+
+  Future<void> _archive() async {
+    await _hideActivity(
+      title: 'Archive activity?',
+      content:
+          'Archive "${widget.trackable.name}" and hide it from new sessions.',
+      actionLabel: 'Archive',
+    );
+  }
+
+  Future<void> _delete() async {
+    await _hideActivity(
+      title: 'Delete activity?',
+      content:
+          'Delete "${widget.trackable.name}" from new sessions. Existing history will stay readable.',
+      actionLabel: 'Delete',
+    );
+  }
+
+  Future<void> _hideActivity({
+    required String title,
+    required String content,
+    required String actionLabel,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final repository = context.read<TrackableRepository>();
+    final now = DateTime.now();
+    await repository.updateTrackable(
+      widget.trackable.copyWith(archivedAt: now, updatedAt: now),
+    );
+    for (final mode in widget.modes) {
+      await repository.updateMode(mode.copyWith(archivedAt: now));
+    }
+    if (mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+}
+
+class _EditorPanel extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  const _EditorPanel({
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF101826).withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+            spreadRadius: -14,
+          ),
+        ],
+      ),
+      child: Padding(padding: padding, child: child),
+    );
+  }
+}
+
+class _EditorSquareButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _EditorSquareButton({
+    required this.icon,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF182131).withValues(alpha: 0.82),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Icon(
+            icon,
+            color: color ?? Colors.white.withValues(alpha: 0.82),
+            size: 28,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditorNameField extends StatelessWidget {
+  final TextEditingController controller;
+
+  const _EditorNameField({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      maxLength: 32,
+      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            color: Colors.white.withValues(alpha: 0.94),
+            fontWeight: FontWeight.w700,
+          ),
+      decoration: InputDecoration(
+        counterStyle: TextStyle(color: Colors.white.withValues(alpha: 0.48)),
+        filled: true,
+        fillColor: const Color(0xFF101826).withValues(alpha: 0.72),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF8F4CFF)),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeEditorRow extends StatelessWidget {
+  final _EditableMode mode;
+  final int index;
+  final Color color;
+  final bool canDelete;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  const _ModeEditorRow({
+    super.key,
+    required this.mode,
+    required this.index,
+    required this.color,
+    required this.canDelete,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Text(
+              '${index + 1}',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.34),
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            const SizedBox(width: 14),
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Text(
+                mode.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            _EditorSquareButton(icon: Icons.edit_outlined, onTap: onRename),
+            const SizedBox(width: 10),
+            _EditorSquareButton(
+              icon: Icons.delete_outline,
+              color: const Color(0xFFFF584D),
+              onTap: canDelete ? onDelete : () {},
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArchiveActivityTile extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ArchiveActivityTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF101826).withValues(alpha: 0.72),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A2233).withValues(alpha: 0.82),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: Icon(
+                    Icons.inventory_2_outlined,
+                    color: Colors.white.withValues(alpha: 0.72),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Archive activity',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.92),
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'This activity will be hidden from new sessions.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.58),
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withValues(alpha: 0.68),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DeleteActivityButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _DeleteActivityButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: const Icon(Icons.delete_outline),
+      label: const Text('Delete activity'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFFFF584D),
+        side: const BorderSide(color: Color(0xFFFF3B30)),
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        textStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
 }
 
 class _EditableMode {
@@ -3827,11 +5124,13 @@ class _TrackableActionSliderOverlay extends StatelessWidget {
   final _TrackableSliderAction? selectedAction;
   final Set<_TrackableSliderAction> disabledActions;
   final bool showCommandActions;
+  final Color accentColor;
   final String? description;
 
   const _TrackableActionSliderOverlay({
     required this.selectedAction,
     required this.disabledActions,
+    required this.accentColor,
     this.showCommandActions = true,
     this.description,
   });
@@ -3839,9 +5138,6 @@ class _TrackableActionSliderOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const timelineActions = _TrackableSliderAction.timelineActions;
-    const leftActions = _TrackableSliderAction.leftActions;
-    const commandActions = _TrackableSliderAction.commandActions;
-    final colorScheme = Theme.of(context).colorScheme;
     final selected = selectedAction;
     final effectiveDescription =
         selected?.description ?? description ?? 'Slide to choose an action';
@@ -3849,111 +5145,110 @@ class _TrackableActionSliderOverlay extends StatelessWidget {
         ? _TrackableSliderAction.commandAreaWidth
         : _TrackableSliderAction.leftActionInset;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorScheme.surfaceContainerHighest.withValues(alpha: 0.96),
-            colorScheme.surface.withValues(alpha: 0.94),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0C1220).withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(
+            color: Color.lerp(accentColor, Colors.white, 0.20)!.withValues(
+              alpha: 0.26,
+            ),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withValues(alpha: 0.20),
+              blurRadius: 36,
+              offset: const Offset(0, 18),
+              spreadRadius: -16,
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.42),
+              blurRadius: 30,
+              offset: const Offset(0, 18),
+              spreadRadius: -18,
+            ),
           ],
         ),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.38),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: 24,
-            offset: const Offset(0, 14),
-          ),
-        ],
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        height: _TrackableSliderAction.sliderHeight,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                if (selected != null && !disabledActions.contains(selected))
-                  _SliderSelectedBackground(
-                    action: selected,
-                    width: constraints.maxWidth,
-                    includeCommandActions: showCommandActions,
-                  ),
-                Positioned(
-                  left: _TrackableSliderAction.timelineLeft,
-                  right: timelineRight,
-                  top: 30,
-                  child: _BackdateTimeline(
-                    actions: timelineActions,
-                    selectedAction: selected,
-                    disabledActions: disabledActions,
-                  ),
-                ),
-                Positioned(
-                  left: _TrackableSliderAction.timelineLeft,
-                  right: timelineRight,
-                  top: 9,
-                  child: Text(
-                    effectiveDescription,
-                    maxLines: 1,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                  ),
-                ),
-                Positioned(
-                  left: _TrackableSliderAction.leftActionInset,
-                  top: _TrackableSliderAction.commandTop,
-                  bottom: _TrackableSliderAction.commandTop,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final action in leftActions)
-                        _TrackableActionCircleButton(
-                          action: action,
-                          isSelected: action == selected,
-                          isDisabled: disabledActions.contains(action),
-                        ),
-                    ],
-                  ),
-                ),
-                if (showCommandActions)
+        child: SizedBox(
+          width: double.infinity,
+          height: _TrackableSliderAction.sliderHeight,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 520;
+              return Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  if (selected != null && !disabledActions.contains(selected))
+                    _SliderSelectedBackground(
+                      action: selected,
+                      width: constraints.maxWidth,
+                      includeCommandActions: showCommandActions,
+                      accentColor: accentColor,
+                    ),
                   Positioned(
-                    right: _TrackableSliderAction.commandRightInset,
-                    top: _TrackableSliderAction.commandTop,
-                    bottom: _TrackableSliderAction.commandTop,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (int i = 0; i < commandActions.length; i++) ...[
-                          _TrackableActionCircleButton(
-                            action: commandActions[i],
-                            isSelected: commandActions[i] == selected,
-                            isDisabled: disabledActions.contains(
-                              commandActions[i],
-                            ),
-                          ),
-                          if (i != commandActions.length - 1)
-                            const SizedBox(
-                              width: _TrackableSliderAction.commandGap,
-                            ),
-                        ],
-                      ],
+                    left: _TrackableSliderAction.timelineLeft,
+                    right: timelineRight,
+                    top: compact ? 69 : 71,
+                    child: _BackdateTimeline(
+                      actions: timelineActions,
+                      selectedAction: selected,
+                      disabledActions: disabledActions,
+                      accentColor: accentColor,
                     ),
                   ),
-              ],
-            );
-          },
+                  Positioned(
+                    left: 18,
+                    right: 18,
+                    top: 24,
+                    child: Text(
+                      effectiveDescription.toUpperCase(),
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.88),
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 2.4,
+                          ),
+                    ),
+                  ),
+                  Positioned(
+                    left: _TrackableSliderAction.leftActionInset,
+                    top: _TrackableSliderAction.commandTop,
+                    child: _TrackableActionPanelButton(
+                      action: _TrackableSliderAction.customTime,
+                      isSelected: selected == _TrackableSliderAction.customTime,
+                      isDisabled: disabledActions.contains(
+                        _TrackableSliderAction.customTime,
+                      ),
+                      accentColor: accentColor,
+                    ),
+                  ),
+                  if (showCommandActions)
+                    Positioned(
+                      right: _TrackableSliderAction.commandRightInset,
+                      top: _TrackableSliderAction.commandTop,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _TrackableActionCircleButton(
+                            action: _TrackableSliderAction.edit,
+                            isSelected: selected == _TrackableSliderAction.edit,
+                            isDisabled: disabledActions.contains(
+                              _TrackableSliderAction.edit,
+                            ),
+                            accentColor: accentColor,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -3964,11 +5259,13 @@ class _SliderSelectedBackground extends StatelessWidget {
   final _TrackableSliderAction action;
   final double width;
   final bool includeCommandActions;
+  final Color accentColor;
 
   const _SliderSelectedBackground({
     required this.action,
     required this.width,
     required this.includeCommandActions,
+    required this.accentColor,
   });
 
   @override
@@ -3984,28 +5281,81 @@ class _SliderSelectedBackground extends StatelessWidget {
 
     return Positioned(
       left: rect.left,
-      top: 0,
+      top: action.kind == _TrackableSliderActionKind.backdate ? 70 : 54,
       width: rect.width,
-      bottom: 0,
+      height: action.kind == _TrackableSliderActionKind.backdate ? 58 : 40,
       child: IgnorePointer(
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                action.accentColor.withValues(alpha: 0.28),
-                action.accentColor.withValues(alpha: 0.12),
-                action.accentColor.withValues(alpha: 0.20),
-              ],
-            ),
-            border: Border.symmetric(
-              vertical: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
-            ),
+            borderRadius: BorderRadius.circular(22),
+            color: _effectiveAccent.withValues(alpha: 0.10),
+            boxShadow: [
+              BoxShadow(
+                color: _effectiveAccent.withValues(alpha: 0.25),
+                blurRadius: 34,
+                spreadRadius: -8,
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+
+  Color get _effectiveAccent {
+    return accentColor;
+  }
+}
+
+class _TrackableActionPanelButton extends StatelessWidget {
+  final _TrackableSliderAction action;
+  final bool isSelected;
+  final bool isDisabled;
+  final Color accentColor;
+
+  const _TrackableActionPanelButton({
+    required this.action,
+    required this.isSelected,
+    required this.isDisabled,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveColor = isDisabled ? Colors.grey.shade600 : accentColor;
+    final foreground = isDisabled
+        ? Colors.white.withValues(alpha: 0.30)
+        : Color.lerp(effectiveColor, Colors.white, 0.42)!;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      width: _TrackableSliderAction.commandSize,
+      height: _TrackableSliderAction.commandSize,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            effectiveColor.withValues(alpha: isSelected ? 0.32 : 0.16),
+            Colors.black.withValues(alpha: 0.22),
+          ],
+        ),
+        border: Border.all(
+          color: effectiveColor.withValues(alpha: isSelected ? 0.88 : 0.44),
+          width: isSelected ? 1.6 : 1.1,
+        ),
+        boxShadow: [
+          if (isSelected)
+            BoxShadow(
+              color: effectiveColor.withValues(alpha: 0.34),
+              blurRadius: 24,
+              spreadRadius: -2,
+            ),
+        ],
+      ),
+      child: Icon(action.icon, size: 21, color: foreground),
     );
   }
 }
@@ -4014,43 +5364,44 @@ class _BackdateTimeline extends StatelessWidget {
   final List<_TrackableSliderAction> actions;
   final _TrackableSliderAction? selectedAction;
   final Set<_TrackableSliderAction> disabledActions;
+  final Color accentColor;
 
   const _BackdateTimeline({
     required this.actions,
     required this.selectedAction,
     required this.disabledActions,
+    required this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
         final pointWidth = (constraints.maxWidth / actions.length)
-            .clamp(14.0, 24.0)
+            .clamp(13.0, 26.0)
             .toDouble();
 
         return SizedBox(
-          height: 54,
+          height: 48,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               Positioned(
                 left: pointWidth / 2,
                 right: pointWidth / 2,
-                top: 22,
+                top: 30,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(999),
                     gradient: LinearGradient(
                       colors: [
-                        colorScheme.primary.withValues(alpha: 0.18),
-                        colorScheme.tertiary.withValues(alpha: 0.30),
-                        colorScheme.secondary.withValues(alpha: 0.22),
+                        Colors.white.withValues(alpha: 0.20),
+                        accentColor.withValues(alpha: 0.40),
+                        Colors.white.withValues(alpha: 0.18),
                       ],
                     ),
                   ),
-                  child: const SizedBox(height: 4),
+                  child: const SizedBox(height: 2),
                 ),
               ),
               Row(
@@ -4063,6 +5414,7 @@ class _BackdateTimeline extends StatelessWidget {
                       width: pointWidth,
                       isSelected: action == selectedAction,
                       isDisabled: disabledActions.contains(action),
+                      accentColor: accentColor,
                     ),
                 ],
               ),
@@ -4079,24 +5431,42 @@ class _BackdateTimelinePoint extends StatelessWidget {
   final double width;
   final bool isSelected;
   final bool isDisabled;
+  final Color accentColor;
 
   const _BackdateTimelinePoint({
     required this.action,
     required this.width,
     required this.isSelected,
     required this.isDisabled,
+    required this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = action.accentColor;
-    final effectiveColor = isDisabled ? Colors.grey.shade500 : color;
-    final dotSize = math.min(isSelected ? 18.0 : 12.0, width - 2);
+    final effectiveColor = isDisabled ? Colors.grey.shade500 : accentColor;
+    final dotSize = math.min(isSelected ? 16.0 : 10.0, width - 2);
     return SizedBox(
       width: width,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              action.compactTimelineLabel,
+              maxLines: 1,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: isDisabled
+                        ? Colors.white.withValues(alpha: 0.28)
+                        : Colors.white.withValues(
+                            alpha: isSelected ? 0.96 : 0.55,
+                          ),
+                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w800,
+                    letterSpacing: 0,
+                  ),
+            ),
+          ),
+          const SizedBox(height: 16),
           AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             width: dotSize,
@@ -4107,9 +5477,8 @@ class _BackdateTimelinePoint extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  ColorUtils.lighten(effectiveColor, isDisabled ? 0.06 : 0.16),
-                  effectiveColor,
-                  ColorUtils.darken(effectiveColor, isDisabled ? 0.10 : 0.18),
+                  Color.lerp(effectiveColor, Colors.white, 0.34)!,
+                  effectiveColor.withValues(alpha: isSelected ? 1 : 0.62),
                 ],
               ),
               border: Border.all(
@@ -4120,7 +5489,7 @@ class _BackdateTimelinePoint extends StatelessWidget {
                 if (isSelected)
                   BoxShadow(
                     color: effectiveColor.withValues(alpha: 0.42),
-                    blurRadius: 14,
+                    blurRadius: 18,
                     spreadRadius: 2,
                   ),
               ],
@@ -4128,29 +5497,10 @@ class _BackdateTimelinePoint extends StatelessWidget {
             child: isDisabled
                 ? Icon(
                     Icons.lock,
-                    size: 9,
+                    size: 7,
                     color: Colors.white.withValues(alpha: 0.72),
                   )
                 : null,
-          ),
-          const SizedBox(height: 6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              action.label,
-              maxLines: 1,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: isDisabled
-                        ? Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.30)
-                        : Theme.of(context).colorScheme.onSurface.withValues(
-                              alpha: isSelected ? 0.92 : 0.62,
-                            ),
-                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
-                    fontSize: 9,
-                  ),
-            ),
           ),
         ],
       ),
@@ -4162,73 +5512,55 @@ class _TrackableActionCircleButton extends StatelessWidget {
   final _TrackableSliderAction action;
   final bool isSelected;
   final bool isDisabled;
+  final Color accentColor;
 
   const _TrackableActionCircleButton({
     required this.action,
     required this.isSelected,
     required this.isDisabled,
+    required this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = action.accentColor;
-    final effectiveColor = isDisabled ? Colors.grey.shade600 : color;
+    final effectiveColor = isDisabled ? Colors.grey.shade600 : accentColor;
     final foreground = isDisabled
         ? Colors.white.withValues(alpha: 0.35)
-        : Colors.white.withValues(alpha: 0.94);
+        : Color.lerp(effectiveColor, Colors.white, 0.42)!;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
-      width: isSelected ? 58 : 50,
-      height: isSelected ? 58 : 50,
+      width: _TrackableSliderAction.commandSize,
+      height: _TrackableSliderAction.commandSize,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(12),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDisabled
               ? [
-                  ColorUtils.lighten(effectiveColor, 0.04),
-                  effectiveColor,
-                  ColorUtils.darken(effectiveColor, 0.18),
+                  effectiveColor.withValues(alpha: 0.20),
+                  Colors.black.withValues(alpha: 0.26),
                 ]
               : [
-                  ColorUtils.lighten(effectiveColor, 0.18),
-                  effectiveColor,
-                  ColorUtils.darken(effectiveColor, 0.18),
+                  effectiveColor.withValues(alpha: isSelected ? 0.32 : 0.16),
+                  Colors.black.withValues(alpha: 0.22),
                 ],
         ),
         border: Border.all(
-          color: Colors.white.withValues(alpha: isSelected ? 0.82 : 0.20),
-          width: isSelected ? 2 : 1,
+          color: effectiveColor.withValues(alpha: isSelected ? 0.88 : 0.44),
+          width: isSelected ? 1.6 : 1.1,
         ),
         boxShadow: [
           if (isSelected)
             BoxShadow(
-              color: color.withValues(alpha: 0.38),
-              blurRadius: 18,
-              spreadRadius: 1,
+              color: effectiveColor.withValues(alpha: 0.34),
+              blurRadius: 24,
+              spreadRadius: -2,
             ),
         ],
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(action.icon, size: 19, color: foreground),
-          const SizedBox(height: 2),
-          Text(
-            action.shortLabel,
-            maxLines: 1,
-            overflow: TextOverflow.fade,
-            softWrap: false,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: foreground,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 9,
-                ),
-          ),
-        ],
-      ),
+      child: Icon(action.icon, size: 21, color: foreground),
     );
   }
 }
@@ -4243,18 +5575,18 @@ class _LongPressTrackableTarget {
   });
 }
 
-enum _TrackableSliderActionKind { backdate, customTime, edit, archive }
+enum _TrackableSliderActionKind { backdate, customTime, edit }
 
 class _TrackableSliderAction {
-  static const sliderHeight = 92.0;
+  static const sliderHeight = 132.0;
   static const barInset = 0.0;
-  static const leftActionInset = 8.0;
-  static const timelineLeft = 68.0;
-  static const commandAreaWidth = 116.0;
-  static const commandRightInset = 8.0;
-  static const commandTop = 18.0;
-  static const commandSize = 50.0;
-  static const commandGap = 6.0;
+  static const leftActionInset = 18.0;
+  static const timelineLeft = 64.0;
+  static const commandAreaWidth = 58.0;
+  static const commandRightInset = 18.0;
+  static const commandTop = 58.0;
+  static const commandSize = 40.0;
+  static const commandGap = 8.0;
 
   final String label;
   final String description;
@@ -4332,12 +5664,6 @@ class _TrackableSliderAction {
     description: 'Edit activity',
     kind: _TrackableSliderActionKind.edit,
   );
-  static const archive = _TrackableSliderAction._(
-    label: 'Archive',
-    description: 'Archive activity',
-    kind: _TrackableSliderActionKind.archive,
-  );
-
   static const timelineActions = [
     twoHours,
     oneHour,
@@ -4352,7 +5678,7 @@ class _TrackableSliderAction {
 
   static const leftActions = [customTime];
 
-  static const commandActions = [edit, archive];
+  static const commandActions = [edit];
 
   String get shortLabel {
     switch (kind) {
@@ -4362,9 +5688,14 @@ class _TrackableSliderAction {
         return 'Time';
       case _TrackableSliderActionKind.edit:
         return 'Edit';
-      case _TrackableSliderActionKind.archive:
-        return 'Arc';
     }
+  }
+
+  String get compactTimelineLabel {
+    if (label.endsWith('m')) {
+      return label.substring(0, label.length - 1);
+    }
+    return label;
   }
 
   IconData get icon {
@@ -4372,11 +5703,9 @@ class _TrackableSliderAction {
       case _TrackableSliderActionKind.backdate:
         return Icons.history;
       case _TrackableSliderActionKind.customTime:
-        return Icons.tune;
+        return Icons.calendar_month_outlined;
       case _TrackableSliderActionKind.edit:
         return Icons.edit;
-      case _TrackableSliderActionKind.archive:
-        return Icons.inventory_2_outlined;
     }
   }
 
@@ -4398,8 +5727,6 @@ class _TrackableSliderAction {
         return const Color(0xFF246BFE);
       case _TrackableSliderActionKind.edit:
         return const Color(0xFF7C3CFF);
-      case _TrackableSliderActionKind.archive:
-        return const Color(0xFFFF7043);
     }
   }
 
@@ -4455,7 +5782,7 @@ class _TrackableSliderAction {
         barInset -
         (includeCommandActions ? commandAreaWidth : leftActionInset);
     if (timelineEnd <= timelineStart ||
-        dy < 20 ||
+        dy < 56 ||
         dy > sliderHeight ||
         dx < timelineStart ||
         dx > timelineEnd) {
@@ -4484,7 +5811,7 @@ class _TrackableSliderAction {
       if (leftActions.contains(action)) {
         final index = leftActions.indexOf(action);
         final left = leftActionInset + index * (commandSize + commandGap);
-        return Rect.fromLTWH(left, 0, commandSize, sliderHeight);
+        return Rect.fromLTWH(left, commandTop, commandSize, commandSize);
       }
 
       final index = commandActions.indexOf(action);
@@ -4493,7 +5820,7 @@ class _TrackableSliderAction {
           commandActions.length * commandSize -
           (commandActions.length - 1) * commandGap;
       final left = commandLeft + index * (commandSize + commandGap);
-      return Rect.fromLTWH(left, 0, commandSize, sliderHeight);
+      return Rect.fromLTWH(left, commandTop, commandSize, commandSize);
     }
 
     final index = timelineActions.indexOf(action);

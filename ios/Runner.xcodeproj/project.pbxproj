@@ -18,6 +18,10 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A1B2C3D4E5F60718293A4B5C /* ChronikaLiveActivityExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5B /* ChronikaLiveActivityExtension.swift */; };
 		A1B2C3D4E5F60718293A4B5D /* ChronikaLiveActivityExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5A /* ChronikaLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C4F2A1019E184E8BB5E6D001 /* ChronikaLiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */; };
+		C4F2A1019E184E8BB5E6D002 /* ChronikaLiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */; };
+		C4F2A1019E184E8BB5E6D003 /* ChronikaLiveActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */; };
+		C4F2A1019E184E8BB5E6D004 /* ChronikaLiveActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +90,8 @@
 		A1B2C3D4E5F60718293A4B57 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5A /* ChronikaLiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ChronikaLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B5B /* ChronikaLiveActivityExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaLiveActivityExtension.swift; sourceTree = "<group>"; };
+		C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaLiveActivityShared.swift; sourceTree = "<group>"; };
+		C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaLiveActivityIntents.swift; sourceTree = "<group>"; };
 		D189E4EFA062754FD678760D /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		E1849EED935EE30DF9A34827 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		E4E7DB4DB12D153C6A6AA7DB /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
@@ -193,6 +199,8 @@
 		A1B2C3D4E5F60718293A4B54 /* ChronikaLiveActivityExtension */ = {
 			isa = PBXGroup;
 			children = (
+				C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */,
+				C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */,
 				A1B2C3D4E5F60718293A4B5B /* ChronikaLiveActivityExtension.swift */,
 				A1B2C3D4E5F60718293A4B57 /* Info.plist */,
 				A1B2C3D4E5F60718293A4B56 /* ChronikaLiveActivityExtension.entitlements */,
@@ -244,6 +252,8 @@
 				A1B2C3D4E5F60718293A4B51 /* Embed App Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				92463EC51041E100E60F92A3 /* [CP] Embed Pods Frameworks */,
+				C9A7D0B12F0B4E9180A9C331 /* Re-sign Embedded Frameworks */,
+				C9A7D0B12F0B4E9180A9C332 /* Fix Native Asset Platforms */,
 			);
 			buildRules = (
 			);
@@ -414,6 +424,37 @@
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
 		};
+		C9A7D0B12F0B4E9180A9C331 /* Re-sign Embedded Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Re-sign Embedded Frameworks";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"${CODE_SIGNING_ALLOWED:-}\" = \"NO\" ] || [ \"${CODE_SIGNING_REQUIRED:-}\" = \"NO\" ] || [ -z \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n  exit 0\nfi\n\nFRAMEWORKS_DIR=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nif [ ! -d \"$FRAMEWORKS_DIR\" ]; then\n  exit 0\nfi\n\nfor framework in \"$FRAMEWORKS_DIR\"/*.framework; do\n  [ -e \"$framework\" ] || continue\n\n  binary=\"$framework/$(basename \"$framework\" .framework)\"\n  if [ -f \"$binary\" ] && file \"$binary\" | grep -q \"Mach-O\"; then\n    binary_archs=$(lipo -archs \"$binary\" 2>/dev/null || true)\n    for arch in $binary_archs; do\n      case \" ${ARCHS:-} \" in\n        *\" $arch \"*) ;;\n        *)\n          tmp_binary=\"${binary}.thin\"\n          echo \"Stripping $arch from $(basename \"$framework\")\"\n          if lipo -remove \"$arch\" -output \"$tmp_binary\" \"$binary\"; then\n            mv \"$tmp_binary\" \"$binary\"\n          else\n            rm -f \"$tmp_binary\"\n            echo \"warning: Failed to strip $arch from $(basename \"$framework\"); continuing with existing binary\"\n          fi\n          ;;\n      esac\n    done\n  fi\n\n  echo \"Re-signing $(basename \"$framework\") with ${EXPANDED_CODE_SIGN_IDENTITY_NAME:-$EXPANDED_CODE_SIGN_IDENTITY}\"\n  /usr/bin/codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none --preserve-metadata=identifier,entitlements \"$framework\"\ndone\n";
+		};
+		C9A7D0B12F0B4E9180A9C332 /* Fix Native Asset Platforms */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/resign_embedded_frameworks.sh",
+			);
+			name = "Fix Native Asset Platforms";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"${SRCROOT}/scripts/resign_embedded_frameworks.sh\"";
+		};
 		A4AA484F6408461D934D7CAD /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -451,6 +492,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C4F2A1019E184E8BB5E6D001 /* ChronikaLiveActivityShared.swift in Sources */,
+				C4F2A1019E184E8BB5E6D003 /* ChronikaLiveActivityIntents.swift in Sources */,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
@@ -460,6 +503,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C4F2A1019E184E8BB5E6D002 /* ChronikaLiveActivityShared.swift in Sources */,
+				C4F2A1019E184E8BB5E6D004 /* ChronikaLiveActivityIntents.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* ChronikaLiveActivityExtension.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

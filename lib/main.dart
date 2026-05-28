@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:live_activities/live_activities.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_platform.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
+import 'package:time_tracker/application/templates/template_seed_service.dart';
 import 'package:time_tracker/data/database/app_database.dart';
 import 'package:time_tracker/data/repositories/session_v2_repository_impl.dart';
 import 'package:time_tracker/data/repositories/timeline_repository_impl.dart';
@@ -28,6 +29,9 @@ void main() async {
   final sessionV2Repository = SessionV2RepositoryImpl(appDatabase: appDatabase);
   final trackableRepository = TrackableRepositoryImpl(appDatabase: appDatabase);
   final timelineRepository = TimelineRepositoryImpl(appDatabase: appDatabase);
+  await TemplateSeedService(
+    appDatabase: appDatabase,
+  ).seedDefaultTemplatesIfNeeded();
   final themeController = AppThemeController();
   final activeSessionBarService = ActiveSessionBarService(
     platform: _activeSessionBarPlatform(),
@@ -66,20 +70,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeController = AppThemeScope.of(context);
-
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeController,
-      builder: (context, themeMode, _) {
-        return MaterialApp(
-          title: 'Chronika',
-          theme: ChronikaTheme.light(),
-          darkTheme: ChronikaTheme.dark(),
-          themeMode: themeMode,
-          navigatorKey: AppNavigator.navigatorKey,
-          home: const HomePage(),
-        );
-      },
+    return MaterialApp(
+      title: 'Chronika',
+      theme: ChronikaTheme.dark(),
+      darkTheme: ChronikaTheme.dark(),
+      themeMode: ThemeMode.dark,
+      navigatorKey: AppNavigator.navigatorKey,
+      home: const HomePage(),
     );
   }
 }

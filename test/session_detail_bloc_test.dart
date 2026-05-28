@@ -221,7 +221,7 @@ void main() {
       expect(timelineRepository.segments, hasLength(3));
     });
 
-    test('deleting a middle segment merges equal surrounding segments',
+    test('deleting a middle marker lets previous event continue to next marker',
         () async {
       final base = DateTime(2026, 1, 1, 12);
       timelineRepository.segments.addAll([
@@ -262,14 +262,17 @@ void main() {
 
       final loaded = await _waitForLoaded(
         bloc,
-        (state) => state.segments.length == 1,
+        (state) => state.segments.length == 2,
       );
-      await _waitUntil(() => timelineRepository.segments.length == 1);
+      await _waitUntil(() => timelineRepository.segments.length == 2);
 
-      expect(loaded.segments.single.id, 'segment-1');
-      expect(loaded.segments.single.startAt, base);
-      expect(loaded.segments.single.endAt, base.add(const Duration(hours: 3)));
-      expect(timelineRepository.segments.single.id, 'segment-1');
+      expect(loaded.segments[0].id, 'segment-1');
+      expect(loaded.segments[0].startAt, base);
+      expect(loaded.segments[0].endAt, base.add(const Duration(hours: 2)));
+      expect(loaded.segments[1].id, 'segment-3');
+      expect(loaded.segments[1].startAt, base.add(const Duration(hours: 2)));
+      expect(timelineRepository.segments.map((item) => item.id),
+          containsAll(['segment-1', 'segment-3']));
     });
 
     test('deleting a middle segment lets previous segment fill the gap',
@@ -372,12 +375,78 @@ void main() {
       expect(loaded.segments[0].endAt, insertAt);
       expect(loaded.segments[1].trackableId, _Fixture.shopTrackableId);
       expect(loaded.segments[1].startAt, insertAt);
-      expect(loaded.segments[1].endAt, base.add(const Duration(hours: 2)));
+      expect(loaded.segments[1].endAt, isNull);
       expect(
         sessionRepository.sessionTrackables
             .any((item) => item.trackableId == _Fixture.shopTrackableId),
         isTrue,
       );
+    });
+
+    test('closed insert creates start and resume markers without overlap',
+        () async {
+      final base = DateTime.now().subtract(const Duration(hours: 4));
+      timelineRepository.segments.addAll([
+        TimeSegment(
+          id: 'segment-work',
+          sessionId: _Fixture.sessionId,
+          trackableId: _Fixture.workTrackableId,
+          modeId: _Fixture.codingModeId,
+          startAt: base,
+          createdAt: base,
+          updatedAt: base,
+        ),
+        TimeSegment(
+          id: 'segment-later',
+          sessionId: _Fixture.sessionId,
+          trackableId: 'trackable-other',
+          modeId: 'mode-other',
+          startAt: base.add(const Duration(hours: 3)),
+          createdAt: base,
+          updatedAt: base,
+        ),
+      ]);
+      trackableRepository.trackables[_Fixture.shopTrackableId] = Trackable(
+        id: _Fixture.shopTrackableId,
+        name: 'Food',
+        color: '#ffd6a5',
+        createdAt: base,
+        updatedAt: base,
+      );
+      trackableRepository.modes[_Fixture.shopModeId] = TrackableMode(
+        id: _Fixture.shopModeId,
+        trackableId: _Fixture.shopTrackableId,
+        name: TrackableMode.mainName,
+        sortOrder: 0,
+        createdAt: base,
+        updatedAt: base,
+      );
+      await _load(bloc);
+
+      final insertStart = base.add(const Duration(hours: 1, minutes: 59));
+      final insertEnd = base.add(const Duration(hours: 2));
+      bloc.add(SessionDetailCustomSegmentInserted(
+        trackableId: _Fixture.shopTrackableId,
+        modeId: _Fixture.shopModeId,
+        startAt: insertStart,
+        endAt: insertEnd,
+      ));
+
+      final loaded = await _waitForLoaded(
+        bloc,
+        (state) => state.segments.length == 4,
+      );
+      await _waitUntil(() => timelineRepository.segments.length == 4);
+
+      expect(loaded.segments[0].trackableId, _Fixture.workTrackableId);
+      expect(loaded.segments[0].endAt, insertStart);
+      expect(loaded.segments[1].trackableId, _Fixture.shopTrackableId);
+      expect(loaded.segments[1].startAt, insertStart);
+      expect(loaded.segments[1].endAt, insertEnd);
+      expect(loaded.segments[2].trackableId, _Fixture.workTrackableId);
+      expect(loaded.segments[2].startAt, insertEnd);
+      expect(loaded.segments[2].endAt, base.add(const Duration(hours: 3)));
+      expect(loaded.segments[3].trackableId, 'trackable-other');
     });
   });
 }
@@ -574,6 +643,15 @@ class _FakeSessionRepository implements SessionV2Repository {
     SessionTemplateTrackable item,
   ) async {
     templateTrackables.add(item);
+  }
+
+  @override
+  Future<void> replaceSessionTemplateTrackables(
+    String templateId,
+    List<SessionTemplateTrackable> items,
+  ) async {
+    templateTrackables.removeWhere((item) => item.templateId == templateId);
+    templateTrackables.addAll(items);
   }
 
   @override

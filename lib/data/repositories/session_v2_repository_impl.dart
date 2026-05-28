@@ -185,6 +185,28 @@ class SessionV2RepositoryImpl implements SessionV2Repository {
   }
 
   @override
+  Future<void> replaceSessionTemplateTrackables(
+    String templateId,
+    List<SessionTemplateTrackable> items,
+  ) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'session_template_trackables',
+        where: 'template_id = ?',
+        whereArgs: [templateId],
+      );
+      for (final item in items) {
+        await txn.insert(
+          'session_template_trackables',
+          SessionTemplateTrackableModel.fromEntity(item).toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  @override
   Future<List<SessionTemplateTrackable>> getSessionTemplateTrackables(
     String templateId,
   ) async {

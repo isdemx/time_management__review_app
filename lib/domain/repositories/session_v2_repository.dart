@@ -22,6 +22,10 @@ abstract class SessionV2Repository {
   Future<void> deleteSessionTemplate(String id);
   Future<List<SessionTemplate>> getSessionTemplates();
   Future<void> saveSessionTemplateTrackable(SessionTemplateTrackable item);
+  Future<void> replaceSessionTemplateTrackables(
+    String templateId,
+    List<SessionTemplateTrackable> items,
+  );
   Future<List<SessionTemplateTrackable>> getSessionTemplateTrackables(
     String templateId,
   );

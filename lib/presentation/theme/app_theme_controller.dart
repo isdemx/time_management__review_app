@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppThemeController extends ValueNotifier<ThemeMode> {
-  AppThemeController() : super(ThemeMode.system);
+  AppThemeController() : super(ThemeMode.dark);
 
   void setThemeMode(ThemeMode mode) {
     value = mode;

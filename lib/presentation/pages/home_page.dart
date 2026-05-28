@@ -28,6 +28,7 @@ class _HomePageState extends State<HomePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: TabBarView(
         controller: _tabController,
         children: const [
@@ -35,25 +36,41 @@ class _HomePageState extends State<HomePage>
           SettingsPage(),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.paddingOf(context).bottom,
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor.withValues(
+                alpha: 0.92,
+              ),
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant.withValues(
+                    alpha: 0.28,
+                  ),
+            ),
+          ),
         ),
-        child: Material(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          clipBehavior: Clip.antiAlias,
-          child: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(icon: Icon(Icons.list)),
-              Tab(icon: Icon(Icons.settings)),
-            ],
-            labelColor: Theme.of(context).colorScheme.primary,
-            unselectedLabelColor:
-                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
-            indicatorColor: Theme.of(context).colorScheme.primary,
-            overlayColor: WidgetStatePropertyAll(
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            clipBehavior: Clip.antiAlias,
+            child: TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(icon: Icon(Icons.format_list_bulleted_rounded)),
+                Tab(icon: Icon(Icons.settings_rounded)),
+              ],
+              labelColor: const Color(0xFF8B35FF),
+              unselectedLabelColor: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.48),
+              indicatorColor: Colors.transparent,
+              overlayColor: WidgetStatePropertyAll(
+                const Color(0xFF8B35FF).withValues(alpha: 0.08),
+              ),
             ),
           ),
         ),

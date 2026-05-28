@@ -62,20 +62,33 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       return;
     }
 
+    final now = DateTime.now();
     final alreadyAdded = current.sessionTrackables.any(
       (item) => item.trackableId == event.trackableId,
     );
     if (alreadyAdded) {
+      if (!event.activate) {
+        return;
+      }
       final modes = current.modesByTrackable[event.trackableId] ?? [];
-      add(SessionDetailTrackableSelected(
-        trackableId: event.trackableId,
-        modeId: event.modeId ?? _defaultModeId(modes),
-        startAt: event.startAt,
-      ));
+      final modeId = event.modeId ?? _defaultModeId(modes);
+      if (event.endAt != null) {
+        add(SessionDetailCustomSegmentInserted(
+          trackableId: event.trackableId,
+          modeId: modeId,
+          startAt: event.startAt ?? now,
+          endAt: event.endAt,
+        ));
+      } else {
+        add(SessionDetailTrackableSelected(
+          trackableId: event.trackableId,
+          modeId: modeId,
+          startAt: event.startAt,
+        ));
+      }
       return;
     }
 
-    final now = DateTime.now();
     final sessionTrackable = SessionTrackable(
       id: const Uuid().v4(),
       sessionId: current.session.id,
@@ -109,11 +122,24 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
 
     try {
       await sessionRepository.saveSessionTrackable(sessionTrackable);
-      add(SessionDetailTrackableSelected(
-        trackableId: event.trackableId,
-        modeId: event.modeId ?? _defaultModeId(modes),
-        startAt: event.startAt,
-      ));
+      if (!event.activate) {
+        return;
+      }
+      final modeId = event.modeId ?? _defaultModeId(modes);
+      if (event.endAt != null) {
+        add(SessionDetailCustomSegmentInserted(
+          trackableId: event.trackableId,
+          modeId: modeId,
+          startAt: event.startAt ?? now,
+          endAt: event.endAt,
+        ));
+      } else {
+        add(SessionDetailTrackableSelected(
+          trackableId: event.trackableId,
+          modeId: modeId,
+          startAt: event.startAt,
+        ));
+      }
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -138,15 +164,12 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       return;
     }
 
-    if (openSegment != null && startAt.isBefore(openSegment.startAt)) {
-      emit(const SessionDetailFailure(
-        message: 'Selected start time is before the active segment start',
-      ));
+    if (startAt.isAfter(now)) {
+      emit(const SessionDetailFailure(message: 'Start time cannot be future'));
       return;
     }
 
     final activeSession = _activeSession(current.session, startAt, now);
-    final closedSegment = openSegment?.copyWith(endAt: startAt, updatedAt: now);
     final newSegment = TimeSegment(
       id: const Uuid().v4(),
       sessionId: current.session.id,
@@ -156,15 +179,11 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       createdAt: now,
       updatedAt: now,
     );
-
-    final optimisticSegments = [
-      for (final segment in current.segments)
-        if (closedSegment != null && segment.id == closedSegment.id)
-          closedSegment
-        else
-          segment,
-      newSegment,
-    ];
+    final optimisticSegments = _normalizeTimeline(
+      activeSession,
+      [...current.segments, newSegment],
+      now,
+    );
 
     emit(current.copyWith(
       session: activeSession,
@@ -174,10 +193,7 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
 
     try {
       await sessionRepository.updateSession(activeSession);
-      if (closedSegment != null) {
-        await timelineRepository.updateSegment(closedSegment);
-      }
-      await timelineRepository.saveSegment(newSegment);
+      await _persistSegmentDiff(current.segments, optimisticSegments);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -214,14 +230,7 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     if (openSegment != null && openSegment.isPause && event.startAt == null) {
       return;
     }
-    if (openSegment != null && startAt.isBefore(openSegment.startAt)) {
-      emit(const SessionDetailFailure(
-        message: 'Pause start is before the active event start',
-      ));
-      return;
-    }
 
-    final closedSegment = openSegment?.copyWith(endAt: startAt, updatedAt: now);
     final pauseSegment = TimeSegment(
       id: const Uuid().v4(),
       sessionId: current.session.id,
@@ -232,14 +241,11 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       updatedAt: now,
     );
     final pausedSession = _pausedSession(current.session, startAt, now);
-    final optimisticSegments = [
-      for (final segment in current.segments)
-        if (closedSegment != null && segment.id == closedSegment.id)
-          closedSegment
-        else
-          segment,
-      pauseSegment,
-    ]..sort((a, b) => a.startAt.compareTo(b.startAt));
+    final optimisticSegments = _normalizeTimeline(
+      pausedSession,
+      [...current.segments, pauseSegment],
+      now,
+    );
 
     emit(current.copyWith(
       session: pausedSession,
@@ -248,11 +254,8 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     ));
 
     try {
-      if (closedSegment != null) {
-        await timelineRepository.updateSegment(closedSegment);
-      }
-      await timelineRepository.saveSegment(pauseSegment);
       await sessionRepository.updateSession(pausedSession);
+      await _persistSegmentDiff(current.segments, optimisticSegments);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -270,64 +273,82 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
           const SessionDetailFailure(message: 'Pause end must be after start'));
       return;
     }
-
-    final sorted = _sortedSegments(current.segments);
-    final intersectingSegments = sorted.where((segment) {
-      final segmentEnd = segment.endAt ?? now;
-      return segment.startAt.isBefore(endAt) && segmentEnd.isAfter(startAt);
-    }).toList();
-
-    if (intersectingSegments.length != 1) {
-      emit(const SessionDetailFailure(
-        message: 'Pause range must fit inside one existing event',
-      ));
-      return;
-    }
-
-    final source = intersectingSegments.single;
-    if (source.isPause) {
-      return;
-    }
-
-    final sourceEnd = source.endAt;
-    final updatedSource = _segmentWith(
-      source,
-      endAt: startAt,
-      updatedAt: now,
-    );
-    final pauseSegment = TimeSegment(
-      id: const Uuid().v4(),
-      sessionId: current.session.id,
+    await _insertClosedMarkerRange(
+      current: current,
+      emit: emit,
       trackableId: TimeSegment.pauseTrackableId,
       modeId: TimeSegment.pauseModeId,
       startAt: startAt,
       endAt: endAt,
-      createdAt: now,
-      updatedAt: now,
+      now: now,
     );
-    final continuation = TimeSegment(
-      id: const Uuid().v4(),
-      sessionId: source.sessionId,
-      trackableId: source.trackableId,
-      modeId: source.modeId,
-      startAt: endAt,
-      endAt: sourceEnd,
-      createdAt: now,
-      updatedAt: now,
-    );
-    final nextSegments = [
-      for (final segment in sorted)
-        if (segment.id == source.id) updatedSource else segment,
-      pauseSegment,
-      continuation,
-    ]..sort((a, b) => a.startAt.compareTo(b.startAt));
+  }
 
-    emit(current.copyWith(segments: nextSegments, now: now));
+  Future<void> _insertClosedMarkerRange({
+    required SessionDetailLoaded current,
+    required Emitter<SessionDetailState> emit,
+    required String trackableId,
+    required String modeId,
+    required DateTime startAt,
+    required DateTime endAt,
+    required DateTime now,
+  }) async {
+    if (!endAt.isAfter(startAt)) {
+      emit(const SessionDetailFailure(message: 'End must be after start'));
+      return;
+    }
+
+    final sorted = _sortedSegments(current.segments);
+    final source = _segmentActiveAt(sorted, startAt, now);
+    final hasMarkerAtEnd = sorted.any((segment) => segment.startAt == endAt);
+    final keptSegments = [
+      for (final segment in sorted)
+        if (segment.startAt.isBefore(startAt) ||
+            !segment.startAt.isBefore(endAt))
+          segment,
+    ];
+
+    final inserted = TimeSegment(
+      id: const Uuid().v4(),
+      sessionId: current.session.id,
+      trackableId: trackableId,
+      modeId: modeId,
+      startAt: startAt,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final nextSegments = [...keptSegments, inserted];
+
+    if (!hasMarkerAtEnd) {
+      final resumeTrackableId =
+          source?.trackableId ?? TimeSegment.pauseTrackableId;
+      final resumeModeId = source?.modeId ?? TimeSegment.pauseModeId;
+      if (resumeTrackableId != trackableId || resumeModeId != modeId) {
+        nextSegments.add(TimeSegment(
+          id: const Uuid().v4(),
+          sessionId: current.session.id,
+          trackableId: resumeTrackableId,
+          modeId: resumeModeId,
+          startAt: endAt,
+          createdAt: now,
+          updatedAt: now,
+        ));
+      }
+    }
+
+    final nextSession = _sessionStartedAt(current.session, startAt, now);
+    final normalizedSegments =
+        _normalizeTimeline(nextSession, nextSegments, now);
+
+    emit(current.copyWith(
+      session: nextSession,
+      segments: normalizedSegments,
+      now: now,
+    ));
 
     try {
-      await timelineRepository.updateSegment(updatedSource);
-      await timelineRepository.saveSegment(pauseSegment);
-      await timelineRepository.saveSegment(continuation);
+      await sessionRepository.updateSession(nextSession);
+      await _persistSegmentDiff(current.segments, normalizedSegments);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -363,107 +384,15 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       return;
     }
 
-    if (current.segments.isEmpty) {
-      final inserted = TimeSegment(
-        id: const Uuid().v4(),
-        sessionId: current.session.id,
-        trackableId: event.trackableId,
-        modeId: event.modeId,
-        startAt: event.startAt,
-        endAt: endAt,
-        createdAt: now,
-        updatedAt: now,
-      );
-      final session = current.session.copyWith(
-        status: SessionStatus.paused,
-        startedAt: current.session.startedAt ?? event.startAt,
-        pausedAt: endAt,
-        finishedAt: null,
-        updatedAt: now,
-      );
-
-      emit(current.copyWith(
-        session: session,
-        segments: [inserted],
-        now: now,
-      ));
-
-      try {
-        await sessionRepository.updateSession(session);
-        await timelineRepository.saveSegment(inserted);
-      } catch (error) {
-        emit(SessionDetailFailure(message: error.toString()));
-      }
-      return;
-    }
-
-    final intersectingSegments = current.segments.where((segment) {
-      final segmentEnd = segment.endAt ?? now;
-      return segment.startAt.isBefore(endAt) &&
-          segmentEnd.isAfter(event.startAt);
-    }).toList();
-
-    if (intersectingSegments.length != 1) {
-      emit(const SessionDetailFailure(
-        message: 'Custom range must fit inside one existing segment',
-      ));
-      return;
-    }
-
-    final source = intersectingSegments.single;
-    final sourceEnd = source.endAt;
-    final updatedSource = TimeSegment(
-      id: source.id,
-      sessionId: source.sessionId,
-      trackableId: source.trackableId,
-      modeId: source.modeId,
-      startAt: source.startAt,
-      endAt: event.startAt,
-      createdAt: source.createdAt,
-      updatedAt: now,
-    );
-    final inserted = TimeSegment(
-      id: const Uuid().v4(),
-      sessionId: current.session.id,
+    await _insertClosedMarkerRange(
+      current: current,
+      emit: emit,
       trackableId: event.trackableId,
       modeId: event.modeId,
       startAt: event.startAt,
       endAt: endAt,
-      createdAt: now,
-      updatedAt: now,
-    );
-    final continuation = TimeSegment(
-      id: const Uuid().v4(),
-      sessionId: source.sessionId,
-      trackableId: source.trackableId,
-      modeId: source.modeId,
-      startAt: endAt,
-      endAt: sourceEnd,
-      createdAt: now,
-      updatedAt: now,
-    );
-    final session = _activeSession(current.session, event.startAt, now);
-    final optimisticSegments = [
-      for (final segment in current.segments)
-        if (segment.id == source.id) updatedSource else segment,
-      inserted,
-      continuation,
-    ]..sort((a, b) => a.startAt.compareTo(b.startAt));
-
-    emit(current.copyWith(
-      session: session,
-      segments: optimisticSegments,
       now: now,
-    ));
-
-    try {
-      await sessionRepository.updateSession(session);
-      await timelineRepository.updateSegment(updatedSource);
-      await timelineRepository.saveSegment(inserted);
-      await timelineRepository.saveSegment(continuation);
-    } catch (error) {
-      emit(SessionDetailFailure(message: error.toString()));
-    }
+    );
   }
 
   Future<void> _onFinished(
@@ -488,15 +417,12 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       ));
       return;
     }
-    final closedSegment =
-        openSegment?.copyWith(endAt: finishedAt, updatedAt: now);
     final finishedSession = _finishedSession(current.session, finishedAt, now);
-    final optimisticSegments = current.segments
-        .map((segment) =>
-            closedSegment != null && segment.id == closedSegment.id
-                ? closedSegment
-                : segment)
-        .toList();
+    final optimisticSegments = _normalizeTimeline(
+      finishedSession,
+      current.segments,
+      now,
+    );
 
     emit(current.copyWith(
       session: finishedSession,
@@ -505,10 +431,8 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     ));
 
     try {
-      if (closedSegment != null) {
-        await timelineRepository.updateSegment(closedSegment);
-      }
       await sessionRepository.updateSession(finishedSession);
+      await _persistSegmentDiff(current.segments, optimisticSegments);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -556,8 +480,6 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
 
     final now = DateTime.now();
     final segment = sorted[index];
-    final previous = index > 0 ? sorted[index - 1] : null;
-    final next = index < sorted.length - 1 ? sorted[index + 1] : null;
     final endAt = event.endAt;
 
     if (endAt != null && !endAt.isAfter(event.startAt)) {
@@ -568,58 +490,39 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       emit(const SessionDetailFailure(message: 'Event time cannot be future'));
       return;
     }
-    if (previous != null && !event.startAt.isAfter(previous.startAt)) {
-      emit(const SessionDetailFailure(
-        message: 'Start must be after previous event start',
-      ));
-      return;
-    }
-    if (next != null) {
-      final selectedEnd = endAt ?? next.startAt;
-      final nextEnd = next.endAt ?? now;
-      if (!selectedEnd.isBefore(nextEnd)) {
-        emit(const SessionDetailFailure(
-          message: 'End must be before next event end',
-        ));
-        return;
-      }
-    }
 
     final updated = _segmentWith(
       segment,
       startAt: event.startAt,
-      endAt: endAt,
       updatedAt: now,
     );
-    final updatedPrevious = previous == null
-        ? null
-        : _segmentWith(previous, endAt: event.startAt, updatedAt: now);
-    final updatedNext = next == null || endAt == null
-        ? null
-        : _segmentWith(next, startAt: endAt, updatedAt: now);
 
     final nextSegments = [
       for (final item in sorted)
-        if (item.id == updated.id)
-          updated
-        else if (updatedPrevious != null && item.id == updatedPrevious.id)
-          updatedPrevious
-        else if (updatedNext != null && item.id == updatedNext.id)
-          updatedNext
-        else
-          item,
+        if (item.id == updated.id) updated else item,
     ];
+    final preliminarySession = current.session.copyWith(updatedAt: now);
+    final preliminarySegments =
+        _normalizeTimeline(preliminarySession, nextSegments, now);
+    final updatedSession = preliminarySegments.isEmpty
+        ? preliminarySession
+        : _sessionWithStartedAt(
+            preliminarySession,
+            preliminarySegments.first.startAt,
+            now,
+          );
+    final normalizedSegments =
+        _normalizeTimeline(updatedSession, preliminarySegments, now);
 
-    emit(current.copyWith(segments: nextSegments, now: now));
+    emit(current.copyWith(
+      session: updatedSession,
+      segments: normalizedSegments,
+      now: now,
+    ));
 
     try {
-      if (updatedPrevious != null) {
-        await timelineRepository.updateSegment(updatedPrevious);
-      }
-      await timelineRepository.updateSegment(updated);
-      if (updatedNext != null) {
-        await timelineRepository.updateSegment(updatedNext);
-      }
+      await sessionRepository.updateSession(updatedSession);
+      await _persistSegmentDiff(current.segments, normalizedSegments);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -641,75 +544,29 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     }
 
     final now = DateTime.now();
-    final deleted = sorted[index];
-    final previous = index > 0 ? sorted[index - 1] : null;
-    final next = index < sorted.length - 1 ? sorted[index + 1] : null;
-    final nextSegments = <TimeSegment>[];
-    final segmentsToUpdate = <TimeSegment>[];
-    final segmentIdsToDelete = <String>[deleted.id];
-
-    if (previous != null &&
-        next != null &&
-        _sameTrackableMode(previous, next)) {
-      final merged = _segmentWith(
-        previous,
-        endAt: next.endAt,
-        updatedAt: now,
-      );
-      segmentsToUpdate.add(merged);
-      segmentIdsToDelete.add(next.id);
-      for (final segment in sorted) {
-        if (segment.id == deleted.id || segment.id == next.id) {
-          continue;
-        }
-        nextSegments.add(segment.id == previous.id ? merged : segment);
-      }
-    } else if (previous != null) {
-      final filledPrevious = _segmentWith(
-        previous,
-        endAt: deleted.endAt,
-        updatedAt: now,
-      );
-      segmentsToUpdate.add(filledPrevious);
-      for (final segment in sorted) {
-        if (segment.id == deleted.id) {
-          continue;
-        }
-        nextSegments.add(
-          segment.id == previous.id ? filledPrevious : segment,
-        );
-      }
-    } else if (next != null) {
-      final shiftedNext = _segmentWith(
-        next,
-        startAt: deleted.startAt,
-        updatedAt: now,
-      );
-      segmentsToUpdate.add(shiftedNext);
-      for (final segment in sorted) {
-        if (segment.id == deleted.id) {
-          continue;
-        }
-        nextSegments.add(segment.id == next.id ? shiftedNext : segment);
-      }
-    }
-
-    if (previous == null && next == null) {
-      nextSegments.clear();
-    }
+    final nextSegments = [
+      for (final segment in sorted)
+        if (segment.id != event.segmentId) segment,
+    ];
+    final updatedSession = nextSegments.isEmpty
+        ? current.session.copyWith(updatedAt: now)
+        : _sessionWithStartedAt(
+            current.session,
+            _sortedSegments(nextSegments).first.startAt,
+            now,
+          );
+    final normalizedSegments =
+        _normalizeTimeline(updatedSession, nextSegments, now);
 
     emit(current.copyWith(
-      segments: _sortedSegments(nextSegments),
+      session: updatedSession,
+      segments: normalizedSegments,
       now: now,
     ));
 
     try {
-      for (final segment in segmentsToUpdate) {
-        await timelineRepository.updateSegment(segment);
-      }
-      for (final id in segmentIdsToDelete) {
-        await timelineRepository.deleteSegment(id);
-      }
+      await sessionRepository.updateSession(updatedSession);
+      await _persistSegmentDiff(current.segments, normalizedSegments);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -738,40 +595,31 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     }
 
     final now = DateTime.now();
-    final previous = sorted[previousIndex];
     final next = sorted[nextIndex];
     final nextEnd = next.endAt ?? now;
-    if (!event.boundaryAt.isAfter(previous.startAt) ||
+    if (!event.boundaryAt.isAfter(sorted[previousIndex].startAt) ||
         !event.boundaryAt.isBefore(nextEnd) ||
         event.boundaryAt.isAfter(now)) {
       return;
     }
 
-    final updatedPrevious = _segmentWith(
-      previous,
-      endAt: event.boundaryAt,
-      updatedAt: now,
-    );
     final updatedNext = _segmentWith(
       next,
       startAt: event.boundaryAt,
       updatedAt: now,
     );
-    final nextSegments = [
-      for (final segment in sorted)
-        if (segment.id == updatedPrevious.id)
-          updatedPrevious
-        else if (segment.id == updatedNext.id)
-          updatedNext
-        else
-          segment,
-    ];
+    final nextSegments = _normalizeTimeline(
+        current.session,
+        [
+          for (final segment in sorted)
+            if (segment.id == updatedNext.id) updatedNext else segment,
+        ],
+        now);
 
     emit(current.copyWith(segments: nextSegments, now: now));
 
     try {
-      await timelineRepository.updateSegment(updatedPrevious);
-      await timelineRepository.updateSegment(updatedNext);
+      await _persistSegmentDiff(current.segments, nextSegments);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -789,20 +637,10 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
 
     final sorted = _sortedSegments(current.segments);
     final now = DateTime.now();
-    final sourceIndex = sorted.indexWhere((segment) {
-      final endAt = segment.endAt ?? now;
-      return !event.startAt.isBefore(segment.startAt) &&
-          event.startAt.isBefore(endAt);
-    });
-    if (sourceIndex == -1) {
-      return;
-    }
-
-    final source = sorted[sourceIndex];
-    if (!event.startAt.isAfter(source.startAt)) {
-      return;
-    }
-    if (source.trackableId == event.trackableId &&
+    final source = _segmentActiveAt(sorted, event.startAt, now);
+    if (source != null &&
+        source.startAt == event.startAt &&
+        source.trackableId == event.trackableId &&
         source.modeId == event.modeId) {
       return;
     }
@@ -835,19 +673,12 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       modesToAdd = modes;
     }
 
-    final sourceEndAt = source.endAt;
-    final updatedSource = _segmentWith(
-      source,
-      endAt: event.startAt,
-      updatedAt: now,
-    );
     final inserted = TimeSegment(
       id: const Uuid().v4(),
       sessionId: current.session.id,
       trackableId: event.trackableId,
       modeId: event.modeId,
       startAt: event.startAt,
-      endAt: sourceEndAt,
       createdAt: now,
       updatedAt: now,
     );
@@ -858,13 +689,22 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       nextModes[event.trackableId] = modesToAdd;
     }
 
-    final nextSegments = _sortedSegments([
-      for (final segment in sorted)
-        if (segment.id == source.id) updatedSource else segment,
-      inserted,
-    ]);
+    final updatedSession = _sessionStartedAt(
+      current.session,
+      event.startAt,
+      now,
+    );
+    final nextSegments = _normalizeTimeline(
+        updatedSession,
+        [
+          for (final segment in sorted)
+            if (segment.startAt != event.startAt) segment,
+          inserted,
+        ],
+        now);
 
     emit(current.copyWith(
+      session: updatedSession,
       sessionTrackables: nextSessionTrackables,
       trackables: [
         ...current.trackables,
@@ -879,8 +719,8 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       if (sessionTrackableToSave != null) {
         await sessionRepository.saveSessionTrackable(sessionTrackableToSave);
       }
-      await timelineRepository.updateSegment(updatedSource);
-      await timelineRepository.saveSegment(inserted);
+      await sessionRepository.updateSession(updatedSession);
+      await _persistSegmentDiff(current.segments, nextSegments);
     } catch (error) {
       emit(SessionDetailFailure(message: error.toString()));
     }
@@ -898,6 +738,87 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
 
   List<TimeSegment> _sortedSegments(List<TimeSegment> segments) {
     return [...segments]..sort((a, b) => a.startAt.compareTo(b.startAt));
+  }
+
+  List<TimeSegment> _normalizeTimeline(
+    Session session,
+    List<TimeSegment> segments,
+    DateTime now,
+  ) {
+    final byStart = <int, TimeSegment>{};
+    for (final segment in segments) {
+      byStart[segment.startAt.microsecondsSinceEpoch] = segment;
+    }
+
+    final sorted = byStart.values.toList()
+      ..sort((a, b) => a.startAt.compareTo(b.startAt));
+    final normalized = <TimeSegment>[];
+    for (var index = 0; index < sorted.length; index++) {
+      final segment = sorted[index];
+      final nextStart =
+          index < sorted.length - 1 ? sorted[index + 1].startAt : null;
+      final normalizedEndAt =
+          nextStart ?? (session.isFinished ? session.finishedAt : null);
+      normalized.add(
+        _segmentWith(
+          segment,
+          endAt: normalizedEndAt,
+          updatedAt: segment.endAt == normalizedEndAt ? segment.updatedAt : now,
+        ),
+      );
+    }
+    return normalized;
+  }
+
+  Future<void> _persistSegmentDiff(
+    List<TimeSegment> before,
+    List<TimeSegment> after,
+  ) async {
+    final beforeById = {for (final segment in before) segment.id: segment};
+    final afterById = {for (final segment in after) segment.id: segment};
+
+    for (final id in beforeById.keys) {
+      if (!afterById.containsKey(id)) {
+        await timelineRepository.deleteSegment(id);
+      }
+    }
+
+    for (final segment in after) {
+      final previous = beforeById[segment.id];
+      if (previous == null) {
+        await timelineRepository.saveSegment(segment);
+      } else if (!_sameSegment(previous, segment)) {
+        await timelineRepository.updateSegment(segment);
+      }
+    }
+  }
+
+  bool _sameSegment(TimeSegment left, TimeSegment right) {
+    return left.id == right.id &&
+        left.sessionId == right.sessionId &&
+        left.trackableId == right.trackableId &&
+        left.modeId == right.modeId &&
+        left.startAt == right.startAt &&
+        left.endAt == right.endAt &&
+        left.createdAt == right.createdAt &&
+        left.updatedAt == right.updatedAt;
+  }
+
+  TimeSegment? _segmentActiveAt(
+    List<TimeSegment> sorted,
+    DateTime value,
+    DateTime now,
+  ) {
+    for (final segment in sorted.reversed) {
+      final endAt = segment.endAt ?? now;
+      if (!value.isBefore(segment.startAt) && value.isBefore(endAt)) {
+        return segment;
+      }
+      if (!segment.startAt.isAfter(value)) {
+        break;
+      }
+    }
+    return null;
   }
 
   TimeSegment _segmentWith(
@@ -918,10 +839,6 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       createdAt: segment.createdAt,
       updatedAt: updatedAt,
     );
-  }
-
-  bool _sameTrackableMode(TimeSegment left, TimeSegment right) {
-    return left.trackableId == right.trackableId && left.modeId == right.modeId;
   }
 
   Future<SessionDetailLoaded> _load(String sessionId) async {
@@ -945,7 +862,12 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       }
     }
 
-    final segments = await timelineRepository.getSegments(sessionId);
+    final now = DateTime.now();
+    final segments = _normalizeTimeline(
+      session,
+      await timelineRepository.getSegments(sessionId),
+      now,
+    );
 
     return SessionDetailLoaded(
       session: session,
@@ -953,7 +875,7 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
       trackables: trackables,
       modesByTrackable: modesByTrackable,
       segments: segments,
-      now: DateTime.now(),
+      now: now,
     );
   }
 
@@ -964,12 +886,36 @@ class SessionDetailBloc extends Bloc<SessionDetailEvent, SessionDetailState> {
     return modes.first.id;
   }
 
+  Session _sessionStartedAt(Session session, DateTime startedAt, DateTime now) {
+    if (session.startedAt != null && !startedAt.isBefore(session.startedAt!)) {
+      return session.copyWith(updatedAt: now);
+    }
+    return _sessionWithStartedAt(session, startedAt, now);
+  }
+
+  Session _sessionWithStartedAt(
+      Session session, DateTime startedAt, DateTime now) {
+    return Session(
+      id: session.id,
+      name: session.name,
+      status: session.status,
+      startedAt: startedAt,
+      pausedAt: session.pausedAt,
+      finishedAt: session.finishedAt,
+      createdAt: session.createdAt,
+      updatedAt: now,
+    );
+  }
+
   Session _activeSession(Session session, DateTime startedAt, DateTime now) {
     return Session(
       id: session.id,
       name: session.name,
       status: SessionStatus.active,
-      startedAt: session.startedAt ?? startedAt,
+      startedAt:
+          session.startedAt == null || startedAt.isBefore(session.startedAt!)
+              ? startedAt
+              : session.startedAt,
       pausedAt: null,
       finishedAt: null,
       createdAt: session.createdAt,

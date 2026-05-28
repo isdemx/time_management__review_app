@@ -14,11 +14,15 @@ class SessionDetailTrackableAdded extends SessionDetailEvent {
   final String trackableId;
   final String? modeId;
   final DateTime? startAt;
+  final DateTime? endAt;
+  final bool activate;
 
   const SessionDetailTrackableAdded({
     required this.trackableId,
     this.modeId,
     this.startAt,
+    this.endAt,
+    this.activate = true,
   });
 }
 
