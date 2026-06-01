@@ -74,6 +74,7 @@ class ActiveSessionBarState {
   final ActiveSessionBarPreviousActivity? previousActivity;
   final Duration sessionDuration;
   final Duration trackableDuration;
+  final Duration activeModeDuration;
   final DateTime updatedAt;
   final bool compactIslandMode;
   final bool backgroundIndicator;
@@ -91,6 +92,7 @@ class ActiveSessionBarState {
     this.previousActivity,
     required this.sessionDuration,
     required this.trackableDuration,
+    required this.activeModeDuration,
     required this.updatedAt,
     this.compactIslandMode = false,
     this.backgroundIndicator = true,
@@ -115,6 +117,7 @@ class ActiveSessionBarState {
       previousActivity: previousActivity,
       sessionDuration: sessionDuration,
       trackableDuration: trackableDuration,
+      activeModeDuration: activeModeDuration,
       updatedAt: updatedAt,
       compactIslandMode: compactIslandMode ?? this.compactIslandMode,
       backgroundIndicator: backgroundIndicator ?? this.backgroundIndicator,
@@ -134,6 +137,7 @@ class ActiveSessionBarState {
       'modes': modes.map((mode) => mode.toMap()).toList(),
       'sessionDurationSeconds': sessionDuration.inSeconds,
       'trackableDurationSeconds': trackableDuration.inSeconds,
+      'activeModeDurationSeconds': activeModeDuration.inSeconds,
       'updatedAtMillis': updatedAt.millisecondsSinceEpoch,
       'compactIslandMode': compactIslandMode,
       'backgroundIndicator': backgroundIndicator,

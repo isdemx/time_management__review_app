@@ -6,18 +6,24 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:live_activities/live_activities.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_platform.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
+import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
+import 'package:time_tracker/application/onboarding/onboarding_service.dart';
+import 'package:time_tracker/application/paywall/apphud_service.dart';
+import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/application/templates/template_seed_service.dart';
 import 'package:time_tracker/data/database/app_database.dart';
+import 'package:time_tracker/data/repositories/daily_rhythm_repository_impl.dart';
 import 'package:time_tracker/data/repositories/session_v2_repository_impl.dart';
 import 'package:time_tracker/data/repositories/timeline_repository_impl.dart';
 import 'package:time_tracker/data/repositories/trackable_repository_impl.dart';
+import 'package:time_tracker/domain/repositories/daily_rhythm_repository.dart';
 import 'package:time_tracker/domain/repositories/session_v2_repository.dart';
 import 'package:time_tracker/domain/repositories/timeline_repository.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
 import 'package:time_tracker/infrastructure/active_session_bar/flutter_local_notifications_active_session_bar_platform.dart';
 import 'package:time_tracker/infrastructure/active_session_bar/live_activities_active_session_bar_platform.dart';
 import 'package:time_tracker/presentation/navigation/app_navigator.dart';
-import 'package:time_tracker/presentation/pages/home_page.dart';
+import 'package:time_tracker/presentation/onboarding/app_launch_gate.dart';
 import 'package:time_tracker/presentation/theme/app_theme_controller.dart';
 import 'package:time_tracker/presentation/theme/chronika_theme.dart';
 
@@ -29,14 +35,32 @@ void main() async {
   final sessionV2Repository = SessionV2RepositoryImpl(appDatabase: appDatabase);
   final trackableRepository = TrackableRepositoryImpl(appDatabase: appDatabase);
   final timelineRepository = TimelineRepositoryImpl(appDatabase: appDatabase);
+  final dailyRhythmRepository = DailyRhythmRepositoryImpl(
+    appDatabase: appDatabase,
+  );
   await TemplateSeedService(
     appDatabase: appDatabase,
   ).seedDefaultTemplatesIfNeeded();
   final themeController = AppThemeController();
+  final onboardingService = OnboardingService();
+  final paywallService = PaywallService(apphudService: ApphudService());
   final activeSessionBarService = ActiveSessionBarService(
     platform: _activeSessionBarPlatform(),
   );
+  final dailyRhythmNotificationService = DailyRhythmNotificationService(
+    plugin: FlutterLocalNotificationsPlugin(),
+    dailyRhythmRepository: dailyRhythmRepository,
+    sessionRepository: sessionV2Repository,
+    timelineRepository: timelineRepository,
+    trackableRepository: trackableRepository,
+  );
   await activeSessionBarService.initialize();
+  await dailyRhythmNotificationService.initialize(
+    onPayload: (payload) {
+      AppNavigator.handleDailyRhythmPayload(payload);
+    },
+  );
+  await dailyRhythmNotificationService.scheduleDailyRhythmNotifications();
   activeSessionBarService.commands.listen(
     AppNavigator.handleActiveSessionBarCommand,
   );
@@ -53,8 +77,20 @@ void main() async {
         RepositoryProvider<TimelineRepository>.value(
           value: timelineRepository,
         ),
+        RepositoryProvider<DailyRhythmRepository>.value(
+          value: dailyRhythmRepository,
+        ),
         RepositoryProvider<ActiveSessionBarService>.value(
           value: activeSessionBarService,
+        ),
+        RepositoryProvider<DailyRhythmNotificationService>.value(
+          value: dailyRhythmNotificationService,
+        ),
+        RepositoryProvider<OnboardingService>.value(
+          value: onboardingService,
+        ),
+        RepositoryProvider<PaywallService>.value(
+          value: paywallService,
         ),
       ],
       child: AppThemeScope(
@@ -65,8 +101,21 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({Key? key}) : super(key: key);
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppNavigator.openPendingDailyRhythmPayload();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +125,7 @@ class MyApp extends StatelessWidget {
       darkTheme: ChronikaTheme.dark(),
       themeMode: ThemeMode.dark,
       navigatorKey: AppNavigator.navigatorKey,
-      home: const HomePage(),
+      home: const AppLaunchGate(),
     );
   }
 }

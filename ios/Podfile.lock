@@ -1,6 +1,12 @@
 PODS:
   - app_group_directory (2.0.0):
     - Flutter
+  - app_tracking_transparency (0.0.1):
+    - Flutter
+  - apphud (2.7.4):
+    - ApphudSDK (= 3.6.2)
+    - Flutter
+  - ApphudSDK (3.6.2)
   - Flutter (1.0.0)
   - flutter_local_notifications (0.0.1):
     - Flutter
@@ -27,6 +33,8 @@ PODS:
 
 DEPENDENCIES:
   - app_group_directory (from `.symlinks/plugins/app_group_directory/ios`)
+  - app_tracking_transparency (from `.symlinks/plugins/app_tracking_transparency/ios`)
+  - apphud (from `.symlinks/plugins/apphud/ios`)
   - Flutter (from `Flutter`)
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
   - flutter_native_image (from `.symlinks/plugins/flutter_native_image/ios`)
@@ -39,9 +47,17 @@ DEPENDENCIES:
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
   - wakelock_plus (from `.symlinks/plugins/wakelock_plus/ios`)
 
+SPEC REPOS:
+  trunk:
+    - ApphudSDK
+
 EXTERNAL SOURCES:
   app_group_directory:
     :path: ".symlinks/plugins/app_group_directory/ios"
+  app_tracking_transparency:
+    :path: ".symlinks/plugins/app_tracking_transparency/ios"
+  apphud:
+    :path: ".symlinks/plugins/apphud/ios"
   Flutter:
     :path: Flutter
   flutter_local_notifications:
@@ -67,6 +83,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   app_group_directory: 6bb61057e067ff2e96cadc2635c48000783e67ac
+  app_tracking_transparency: e169b653478da7bb15a6c61209015378ca73e375
+  apphud: 84a183c9b73b2bac7204a09d141036f38743859f
+  ApphudSDK: 787b3f4f41427a07f4f8d02590470f31f567cfdf
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_local_notifications: 4cde75091f6327eb8517fa068a0a5950212d2086
   flutter_native_image: 9c0b7451838484458e5b0fae007b86a4c2d4bdfe

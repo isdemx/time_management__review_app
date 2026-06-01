@@ -24,6 +24,7 @@ class TrackableButton extends StatefulWidget {
       onModeLongPressMove;
   final void Function(String modeId, Offset globalPosition)? onModeLongPressEnd;
   final void Function(String modeId, Offset globalPosition)? onModeMenuTap;
+  final VoidCallback? onFocusTap;
 
   const TrackableButton({
     Key? key,
@@ -41,6 +42,7 @@ class TrackableButton extends StatefulWidget {
     this.onModeLongPressMove,
     this.onModeLongPressEnd,
     this.onModeMenuTap,
+    this.onFocusTap,
   }) : super(key: key);
 
   @override
@@ -114,6 +116,8 @@ class _TrackableButtonState extends State<TrackableButton>
     final hasQuickStates = quickStates.isNotEmpty;
     final showMenuButton =
         widget.enabled && MediaQuery.sizeOf(context).shortestSide >= 600;
+    final showFocusButton =
+        widget.enabled && widget.isActive && widget.onFocusTap != null;
 
     final radius = BorderRadius.circular(20);
     return Padding(
@@ -244,7 +248,9 @@ class _TrackableButtonState extends State<TrackableButton>
                     ),
                     if (widget.isActive)
                       Positioned(
-                        right: showMenuButton ? 58 : 42,
+                        right: showFocusButton
+                            ? (showMenuButton ? 104 : 58)
+                            : (showMenuButton ? 58 : 42),
                         top: 14,
                         child: IgnorePointer(
                           child: DecoratedBox(
@@ -272,6 +278,17 @@ class _TrackableButtonState extends State<TrackableButton>
                               ),
                             ),
                           ),
+                        ),
+                      ),
+                    if (showFocusButton)
+                      Positioned(
+                        right: showMenuButton ? 56 : 14,
+                        top: 12,
+                        child: _ActivityIconButton(
+                          accentColor: baseColor,
+                          icon: Icons.timer_outlined,
+                          tooltip: 'Focus',
+                          onTap: widget.onFocusTap!,
                         ),
                       ),
                     if (showMenuButton)
@@ -478,6 +495,53 @@ class _ActivityMoreButton extends StatelessWidget {
             Icons.more_horiz_rounded,
             color: Colors.white.withValues(alpha: 0.82),
             size: 24,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityIconButton extends StatelessWidget {
+  final Color accentColor;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _ActivityIconButton({
+    required this.accentColor,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Tooltip(
+          message: tooltip,
+          child: Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.22),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.42),
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: Colors.white.withValues(alpha: 0.88),
+              size: 20,
+            ),
           ),
         ),
       ),

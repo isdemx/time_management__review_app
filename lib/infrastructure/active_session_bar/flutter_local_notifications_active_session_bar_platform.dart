@@ -92,7 +92,7 @@ class FlutterLocalNotificationsActiveSessionBarPlatform
 
     final title = state.trackableName;
     final body = state.isActive
-        ? 'Mode: ${state.activeModeName}'
+        ? 'Mode: ${state.activeModeName} · ${_formatDuration(state.activeModeDuration)}'
         : 'Paused - ${state.activeModeName} · ${_formatDuration(state.trackableDuration)}';
 
     return plugin.show(

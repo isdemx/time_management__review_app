@@ -6,14 +6,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_models.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
+import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
+import 'package:time_tracker/application/paywall/paywall_models.dart';
+import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/data/utils/color_utils.dart';
+import 'package:time_tracker/domain/entities/day_session.dart';
 import 'package:time_tracker/domain/entities/time_segment.dart';
 import 'package:time_tracker/domain/entities/trackable.dart';
 import 'package:time_tracker/domain/entities/trackable_mode.dart';
+import 'package:time_tracker/domain/repositories/daily_rhythm_repository.dart';
 import 'package:time_tracker/domain/repositories/session_v2_repository.dart';
 import 'package:time_tracker/domain/repositories/timeline_repository.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
 import 'package:time_tracker/presentation/blocs/session_detail/session_detail_bloc.dart';
+import 'package:time_tracker/presentation/pages/daily_rhythm/evening_reflection_page.dart';
+import 'package:time_tracker/presentation/pages/daily_rhythm/focus_mode_page.dart';
+import 'package:time_tracker/presentation/paywall/paywall_page.dart';
 import 'package:time_tracker/presentation/theme/chronika_theme.dart';
 import 'package:time_tracker/presentation/utils/time_format_util.dart';
 import 'package:time_tracker/presentation/widgets/trackable_button.dart';
@@ -89,6 +97,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
   bool _initialModeSwitchConsumed = false;
   bool _initialPauseConsumed = false;
   bool _keepScreenOn = false;
+  String? _lastActivityEntryTrackableId;
 
   @override
   void initState() {
@@ -136,6 +145,12 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
                 initiallyEditing: widget.startEditingTitle,
               ),
               actions: [
+                if (!isFinished)
+                  IconButton(
+                    onPressed: () => _openEveningReflection(context, state),
+                    icon: const Icon(Icons.nightlight_round),
+                    tooltip: 'Close Day',
+                  ),
                 IconButton(
                   onPressed: () => _showSessionEvents(context, state),
                   icon: const Icon(Icons.history),
@@ -181,6 +196,8 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
                           onLongPressEnd: (position) =>
                               _endTrackableSlider(context, state, position),
                           onMenuTap: _openTrackableSliderMenu,
+                          onFocusTap: (trackable) =>
+                              _openFocusMode(context, state, trackable),
                         ),
                       ),
                     ],
@@ -296,6 +313,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
 
     _consumeInitialModeSwitchIfNeeded(context, state);
     _consumeInitialPauseIfNeeded(context, state);
+    unawaited(_syncActivityEntry(context, state));
     _syncActiveSessionBar(context, state);
     if (state.session.isFinished && _keepScreenOn) {
       _setKeepScreenOn(false);
@@ -423,6 +441,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
         modes: const [],
         sessionDuration: _sessionDurationAt(state, state.now),
         trackableDuration: barSegment.durationUntil(state.now),
+        activeModeDuration: barSegment.durationUntil(state.now),
         updatedAt: state.now,
       );
     }
@@ -456,7 +475,27 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       previousActivity: _previousBarActivity(state, barSegment),
       sessionDuration: _sessionDurationAt(state, state.now),
       trackableDuration: state.durationForTrackable(trackable.id),
+      activeModeDuration: _durationForModeAt(
+        state,
+        trackable.id,
+        barSegment.modeId,
+        state.now,
+      ),
       updatedAt: state.now,
+    );
+  }
+
+  Duration _durationForModeAt(
+    SessionDetailLoaded state,
+    String trackableId,
+    String modeId,
+    DateTime now,
+  ) {
+    return state.segments.where((segment) {
+      return segment.trackableId == trackableId && segment.modeId == modeId;
+    }).fold<Duration>(
+      Duration.zero,
+      (total, segment) => total + segment.durationUntil(now),
     );
   }
 
@@ -487,9 +526,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
 
     for (var index = currentIndex - 1; index >= 0; index--) {
       final segment = segments[index];
-      if (segment.isPause ||
-          (segment.trackableId == current.trackableId &&
-              segment.modeId == current.modeId)) {
+      if (segment.isPause || segment.trackableId == current.trackableId) {
         continue;
       }
 
@@ -680,6 +717,100 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       _sliderAction = null;
       _sliderTop = null;
     });
+  }
+
+  Future<void> _openFocusMode(
+    BuildContext context,
+    SessionDetailLoaded state,
+    Trackable trackable,
+  ) async {
+    _closeTrackableSlider();
+    final paywallService = context.read<PaywallService>();
+    final canUseFocus =
+        await paywallService.canUse(PremiumFeature.focusSessions);
+    if (!context.mounted) {
+      return;
+    }
+    if (!canUseFocus) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const PaywallPage(source: 'focus_mode'),
+        ),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FocusModePage(
+          daySessionId: null,
+          activityId: trackable.id,
+          activityName: trackable.name,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _syncActivityEntry(
+    BuildContext context,
+    SessionDetailLoaded state,
+  ) async {
+    final activeTrackableId = state.activeTrackableId;
+    if (_lastActivityEntryTrackableId == null) {
+      _lastActivityEntryTrackableId = activeTrackableId;
+      return;
+    }
+    if (_lastActivityEntryTrackableId == activeTrackableId) {
+      return;
+    }
+    _lastActivityEntryTrackableId = activeTrackableId;
+
+    final repository = context.read<DailyRhythmRepository>();
+    final notificationService = context.read<DailyRhythmNotificationService>();
+    final daySession = await repository.getDaySession(state.session.id);
+    if (daySession == null || daySession.status == DaySessionStatus.completed) {
+      return;
+    }
+    final startedAt = state.openSegment?.startAt ?? DateTime.now();
+    await repository.closeOpenActivityEntries(daySession.id, startedAt);
+    if (activeTrackableId == null || state.openSegment?.isPause == true) {
+      return;
+    }
+    await repository.saveActivityEntry(
+      ActivityEntry(
+        id: const Uuid().v4(),
+        daySessionId: daySession.id,
+        activityId: activeTrackableId,
+        startedAt: startedAt,
+        source: ActivityEntrySource.manual,
+      ),
+    );
+    await notificationService.refreshDailyNudges();
+  }
+
+  Future<void> _openEveningReflection(
+    BuildContext context,
+    SessionDetailLoaded state,
+  ) async {
+    final repository = context.read<DailyRhythmRepository>();
+    final daySession = await repository.getDaySession(state.session.id);
+    if (!context.mounted) return;
+    if (daySession == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Start Day first to close a day.')),
+      );
+      return;
+    }
+    final closed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => EveningReflectionPage(daySession: daySession),
+      ),
+    );
+    if (closed == true && context.mounted) {
+      context.read<SessionDetailBloc>().add(const SessionDetailFinished());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Day closed.')),
+      );
+    }
   }
 
   void _tapTrackableSlider(
@@ -2974,51 +3105,54 @@ class _AnalyticsBalanceChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 360,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          _AnalyticsDonutChart(
-            rows: rows,
-            progress: progress,
-            totalSeconds: totalSeconds,
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Total time',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.58),
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                TimeFormatUtil.formatDuration(totalDuration),
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.94),
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0,
-                    ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '100% of session',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.52),
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
-          ),
-          for (var index = 0; index < math.min(rows.length, 5); index++)
-            _AnalyticsChartCallout(
-              row: rows[index],
+      height: 390,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 24, 6, 10),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            _AnalyticsDonutChart(
+              rows: rows,
+              progress: progress,
               totalSeconds: totalSeconds,
-              index: index,
             ),
-        ],
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Total time',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.58),
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  TimeFormatUtil.formatDuration(totalDuration),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.94),
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '100% of session',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.52),
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+            for (var index = 0; index < math.min(rows.length, 5); index++)
+              _AnalyticsChartCallout(
+                row: rows[index],
+                totalSeconds: totalSeconds,
+                index: index,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -3049,7 +3183,7 @@ class _AnalyticsChartCallout extends StatelessWidget {
     return Align(
       alignment: align,
       child: SizedBox(
-        width: 118,
+        width: 144,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment:
@@ -3066,11 +3200,12 @@ class _AnalyticsChartCallout extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               row.title,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.90),
                     fontWeight: FontWeight.w800,
+                    height: 1.08,
                   ),
             ),
             Text(
@@ -3136,74 +3271,84 @@ class _AnalyticsActivityCard extends StatelessWidget {
                         InkWell(
                           onTap: onToggle,
                           borderRadius: BorderRadius.circular(10),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                flex: 7,
-                                child: Text(
-                                  row.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.94),
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 92,
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    TimeFormatUtil.formatDuration(row.duration),
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    textAlign: TextAlign.end,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.68),
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0,
-                                        ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      row.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.94),
+                                            fontWeight: FontWeight.w900,
+                                            height: 1.08,
+                                          ),
+                                    ),
                                   ),
-                                ),
+                                  Icon(
+                                    expanded
+                                        ? Icons.keyboard_arrow_up_rounded
+                                        : Icons.keyboard_arrow_down_rounded,
+                                    color: Colors.white.withValues(alpha: 0.68),
+                                  ),
+                                ],
                               ),
-                              SizedBox(
-                                width: 54,
-                                child: Text(
-                                  _formatAnalyticsPercent(percent),
-                                  textAlign: TextAlign.end,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleSmall
-                                      ?.copyWith(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.68),
-                                        fontWeight: FontWeight.w800,
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 108,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        TimeFormatUtil.formatDuration(
+                                          row.duration,
+                                        ),
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall
+                                            ?.copyWith(
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.68),
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0,
+                                            ),
                                       ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              SizedBox(
-                                width: 86,
-                                child: _AnalyticsProgressBar(
-                                  color: row.color,
-                                  value: percent,
-                                ),
-                              ),
-                              Icon(
-                                expanded
-                                    ? Icons.keyboard_arrow_up_rounded
-                                    : Icons.keyboard_arrow_down_rounded,
-                                color: Colors.white.withValues(alpha: 0.68),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  SizedBox(
+                                    width: 56,
+                                    child: Text(
+                                      _formatAnalyticsPercent(percent),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.68),
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _AnalyticsProgressBar(
+                                      color: row.color,
+                                      value: percent,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -3253,56 +3398,62 @@ class _AnalyticsModeLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final percent = row.duration.inSeconds / totalSeconds;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
         children: [
-          Icon(Icons.circle, size: 9, color: row.color),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 6,
-            child: Text(
-              row.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.70),
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-          ),
-          SizedBox(
-            width: 86,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(
-                TimeFormatUtil.formatDuration(row.duration),
-                maxLines: 1,
-                softWrap: false,
+          Row(
+            children: [
+              Icon(Icons.circle, size: 9, color: row.color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  row.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.76),
+                        fontWeight: FontWeight.w800,
+                        height: 1.08,
+                      ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                _formatAnalyticsPercent(percent),
                 textAlign: TextAlign.end,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.white.withValues(alpha: 0.64),
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0,
+                      fontWeight: FontWeight.w800,
                     ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 14),
-          SizedBox(
-            width: 86,
-            child: _AnalyticsProgressBar(color: row.color, value: percent),
-          ),
-          SizedBox(
-            width: 48,
-            child: Text(
-              _formatAnalyticsPercent(percent),
-              textAlign: TextAlign.end,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.64),
-                    fontWeight: FontWeight.w800,
+          const SizedBox(height: 7),
+          Row(
+            children: [
+              const SizedBox(width: 19),
+              SizedBox(
+                width: 92,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    TimeFormatUtil.formatDuration(row.duration),
+                    maxLines: 1,
+                    softWrap: false,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.64),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0,
+                        ),
                   ),
-            ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AnalyticsProgressBar(color: row.color, value: percent),
+              ),
+            ],
           ),
         ],
       ),
@@ -3907,6 +4058,7 @@ class _SessionTrackablesList extends StatelessWidget {
   final ValueChanged<Offset> onLongPressEnd;
   final void Function(String trackableId, String modeId, Offset globalPosition)
       onMenuTap;
+  final ValueChanged<Trackable> onFocusTap;
 
   const _SessionTrackablesList({
     required this.state,
@@ -3915,6 +4067,7 @@ class _SessionTrackablesList extends StatelessWidget {
     required this.onLongPressMove,
     required this.onLongPressEnd,
     required this.onMenuTap,
+    required this.onFocusTap,
   });
 
   @override
@@ -3961,6 +4114,7 @@ class _SessionTrackablesList extends StatelessWidget {
           onMenuTap: (modeId, globalPosition) {
             onMenuTap(trackable.id, modeId, globalPosition);
           },
+          onFocusTap: isActive ? () => onFocusTap(trackable) : null,
         );
       },
     );
@@ -4004,6 +4158,7 @@ class _TrackableButtonWithLiveTimer extends StatefulWidget {
   final ValueChanged<Offset> onLongPressMove;
   final ValueChanged<Offset> onLongPressEnd;
   final void Function(String modeId, Offset globalPosition) onMenuTap;
+  final VoidCallback? onFocusTap;
 
   const _TrackableButtonWithLiveTimer({
     super.key,
@@ -4016,6 +4171,7 @@ class _TrackableButtonWithLiveTimer extends StatefulWidget {
     required this.onLongPressMove,
     required this.onLongPressEnd,
     required this.onMenuTap,
+    required this.onFocusTap,
   });
 
   @override
@@ -4073,6 +4229,7 @@ class _TrackableButtonWithLiveTimerState
         widget.onLongPressEnd(globalPosition);
       },
       onModeMenuTap: widget.onMenuTap,
+      onFocusTap: widget.onFocusTap,
     );
   }
 

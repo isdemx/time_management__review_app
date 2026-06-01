@@ -3,6 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_visibility_settings.dart';
+import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
+import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_settings.dart';
+import 'package:time_tracker/presentation/onboarding/onboarding_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -15,6 +18,8 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   ActiveSessionVisibilitySettings _settings =
       const ActiveSessionVisibilitySettings.defaults();
+  DailyRhythmNotificationSettings _rhythmSettings =
+      const DailyRhythmNotificationSettings();
   bool _loaded = false;
 
   @override
@@ -25,11 +30,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadSettings() async {
     final settings = await ActiveSessionVisibilitySettings.load();
+    final rhythmSettings = await DailyRhythmNotificationSettings.load();
     if (!mounted) {
       return;
     }
     setState(() {
       _settings = settings;
+      _rhythmSettings = rhythmSettings;
       _loaded = true;
     });
   }
@@ -39,6 +46,15 @@ class _SettingsPageState extends State<SettingsPage> {
     await context.read<ActiveSessionBarService>().applyVisibilitySettings(
           settings,
         );
+  }
+
+  Future<void> _applyRhythmSettings(
+    DailyRhythmNotificationSettings settings,
+  ) async {
+    setState(() => _rhythmSettings = settings);
+    final notificationService = context.read<DailyRhythmNotificationService>();
+    await settings.save();
+    await notificationService.scheduleDailyRhythmNotifications();
   }
 
   @override
@@ -135,6 +151,96 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 34),
+            const _SettingsSectionLabel('Daily Rhythm'),
+            const SizedBox(height: 10),
+            _GlassSettingsPanel(
+              children: [
+                _VisibilitySettingTile(
+                  icon: Icons.notifications_none_rounded,
+                  title: 'Rhythm notifications',
+                  subtitle: 'Morning start, daily nudges and reflection',
+                  value: _rhythmSettings.enabled,
+                  enabled: _loaded,
+                  onChanged: (value) {
+                    _applyRhythmSettings(
+                      DailyRhythmNotificationSettings(
+                        enabled: value,
+                        morningHour: _rhythmSettings.morningHour,
+                        morningMinute: _rhythmSettings.morningMinute,
+                        middayHour: _rhythmSettings.middayHour,
+                        afternoonHour: _rhythmSettings.afternoonHour,
+                        eveningNudgeHour: _rhythmSettings.eveningNudgeHour,
+                        reflectionHour: _rhythmSettings.reflectionHour,
+                        reflectionMinute: _rhythmSettings.reflectionMinute,
+                      ),
+                    );
+                  },
+                ),
+                _SettingsDivider(),
+                _TimeSettingTile(
+                  icon: Icons.wb_sunny_outlined,
+                  title: 'Morning',
+                  value: TimeOfDay(
+                    hour: _rhythmSettings.morningHour,
+                    minute: _rhythmSettings.morningMinute,
+                  ),
+                  enabled: _loaded && _rhythmSettings.enabled,
+                  onChanged: (value) {
+                    _applyRhythmSettings(
+                      DailyRhythmNotificationSettings(
+                        enabled: _rhythmSettings.enabled,
+                        morningHour: value.hour,
+                        morningMinute: value.minute,
+                        middayHour: _rhythmSettings.middayHour,
+                        afternoonHour: _rhythmSettings.afternoonHour,
+                        eveningNudgeHour: _rhythmSettings.eveningNudgeHour,
+                        reflectionHour: _rhythmSettings.reflectionHour,
+                        reflectionMinute: _rhythmSettings.reflectionMinute,
+                      ),
+                    );
+                  },
+                ),
+                _SettingsDivider(),
+                _TimeSettingTile(
+                  icon: Icons.nightlight_round,
+                  title: 'Reflection',
+                  value: TimeOfDay(
+                    hour: _rhythmSettings.reflectionHour,
+                    minute: _rhythmSettings.reflectionMinute,
+                  ),
+                  enabled: _loaded && _rhythmSettings.enabled,
+                  onChanged: (value) {
+                    _applyRhythmSettings(
+                      DailyRhythmNotificationSettings(
+                        enabled: _rhythmSettings.enabled,
+                        morningHour: _rhythmSettings.morningHour,
+                        morningMinute: _rhythmSettings.morningMinute,
+                        middayHour: _rhythmSettings.middayHour,
+                        afternoonHour: _rhythmSettings.afternoonHour,
+                        eveningNudgeHour: _rhythmSettings.eveningNudgeHour,
+                        reflectionHour: value.hour,
+                        reflectionMinute: value.minute,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 34),
+            const _SettingsSectionLabel('Onboarding'),
+            const SizedBox(height: 10),
+            _GlassSettingsPanel(
+              children: [
+                _AboutSettingTile(
+                  icon: Icons.auto_stories_outlined,
+                  iconColor: const Color(0xFF9C5CFF),
+                  title: 'Show onboarding',
+                  subtitle: 'Replay the intro and paywall flow',
+                  onTap: _openOnboarding,
+                ),
+              ],
+            ),
+            const SizedBox(height: 34),
             const _SettingsSectionLabel('About'),
             const SizedBox(height: 10),
             _GlassSettingsPanel(
@@ -175,6 +281,18 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openOnboarding() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OnboardingPage(
+          onCompleted: () {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          },
         ),
       ),
     );
@@ -322,6 +440,70 @@ class _VisibilitySettingTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _TimeSettingTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final TimeOfDay value;
+  final bool enabled;
+  final ValueChanged<TimeOfDay> onChanged;
+
+  const _TimeSettingTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? () => _pickTime(context) : null,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 15, 14, 15),
+          child: Row(
+            children: [
+              _SettingsIconBubble(icon: icon, color: const Color(0xFF20D67B)),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.92),
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              Text(
+                value.format(context),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: enabled
+                          ? const Color(0xFFA579FF)
+                          : Colors.white.withValues(alpha: 0.34),
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickTime(BuildContext context) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: value,
+    );
+    if (picked != null) {
+      onChanged(picked);
+    }
   }
 }
 

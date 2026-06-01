@@ -132,6 +132,21 @@ private struct ChronikaCurrentActivityPanel: View {
               font: (compact ? Font.headline : Font.title3).weight(.black),
               accent: accent.boostedForGlass()
             )
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+              Text(value(context, "activeModeName", "main"))
+                .font(Font.caption2.weight(.black))
+                .foregroundStyle(.white.opacity(0.62))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+              ChronikaDurationText(
+                context: context,
+                durationKey: "activeModeDurationSeconds",
+                fallbackKey: "trackableDurationSeconds",
+                active: bool(context, "isActive", true),
+                font: Font.caption2.weight(.black),
+                accent: accent.boostedForGlass().opacity(0.88)
+              )
+            }
           }
 
           if shouldShowModes(context: context, prefix: "mode", count: modeCount) {

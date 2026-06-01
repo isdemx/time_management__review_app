@@ -16,6 +16,8 @@ import 'package:time_tracker/domain/repositories/timeline_repository.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
 import 'package:time_tracker/presentation/blocs/session_detail/session_detail_bloc.dart';
 import 'package:time_tracker/presentation/blocs/sessions/sessions_bloc.dart';
+import 'package:time_tracker/presentation/pages/daily_rhythm/morning_start_page.dart';
+import 'package:time_tracker/presentation/pages/new_session_draft_page.dart';
 import 'package:time_tracker/presentation/pages/session_detail_page.dart';
 import 'package:time_tracker/presentation/utils/time_format_util.dart';
 import 'package:uuid/uuid.dart';
@@ -94,13 +96,9 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
                 return _SessionsBackdrop(
                   child: Center(
                     child: FilledButton.icon(
-                      onPressed: () {
-                        context
-                            .read<SessionsBloc>()
-                            .add(const SessionCreated());
-                      },
+                      onPressed: () => _openMorningStart(context),
                       icon: const Icon(Icons.add),
-                      label: const Text('Start new session'),
+                      label: const Text('Start Day'),
                     ),
                   ),
                 );
@@ -131,11 +129,7 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
                     if (activeSessions.isEmpty)
                       SliverToBoxAdapter(
                         child: _EmptyNowCard(
-                          onStart: () {
-                            context
-                                .read<SessionsBloc>()
-                                .add(const SessionCreated());
-                          },
+                          onStart: () => _openMorningStart(context),
                         ),
                       )
                     else
@@ -378,6 +372,17 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
     return sorted;
   }
 
+  Future<void> _openMorningStart(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const MorningStartPage(),
+      ),
+    );
+    if (context.mounted) {
+      context.read<SessionsBloc>().add(const SessionsRequested());
+    }
+  }
+
   int _statusRank(SessionStatus status) {
     switch (status) {
       case SessionStatus.active:
@@ -465,27 +470,108 @@ class _EmptyNowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const accent = Color(0xFF8B35FF);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
-      child: _GlassPanel(
-        borderColor: Colors.white.withValues(alpha: 0.10),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: _GlassPanel(
+          borderColor: accent.withValues(alpha: 0.26),
+          child: Stack(
             children: [
-              Expanded(
-                child: Text(
-                  'No running sessions',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.78),
-                        fontWeight: FontWeight.w800,
-                      ),
+              const Positioned.fill(
+                child: Opacity(
+                  opacity: 0.58,
+                  child: _FlowRibbon(accent: accent, active: true),
                 ),
               ),
-              FilledButton.icon(
-                onPressed: onStart,
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Start'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No running sessions',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.90),
+                                  fontWeight: FontWeight.w900,
+                                ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Start today’s rhythm when you are ready.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.58),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    _EmptyStartButton(onPressed: onStart),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyStartButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _EmptyStartButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF8B35FF);
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [accent, Color(0xFF246BFE)],
+            ),
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.26),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+                spreadRadius: -10,
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.play_arrow_rounded, color: Colors.white),
+              SizedBox(width: 6),
+              Text(
+                'Start',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ],
           ),
@@ -1075,9 +1161,7 @@ class _QuickStartNewSessionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => context.read<SessionsBloc>().add(
-                const SessionCreated(),
-              ),
+          onTap: () => _openDraft(context),
           splashColor: accent.withValues(alpha: 0.10),
           highlightColor: accent.withValues(alpha: 0.06),
           child: Ink(
@@ -1147,6 +1231,17 @@ class _QuickStartNewSessionCard extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _openDraft(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const NewSessionDraftPage(),
+      ),
+    );
+    if (context.mounted) {
+      context.read<SessionsBloc>().add(const SessionsRequested());
+    }
+  }
 }
 
 class _HistorySessionTile extends StatelessWidget {
@@ -1172,16 +1267,15 @@ class _HistorySessionTile extends StatelessWidget {
         child: InkWell(
           onLongPress: () => _showSessionActions(context),
           child: Ink(
-            height: 96,
+            height: 120,
             decoration: BoxDecoration(
               color: const Color(0xFF0D1421).withValues(alpha: 0.78),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -1211,7 +1305,7 @@ class _HistorySessionTile extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Icon(
@@ -1236,7 +1330,7 @@ class _HistorySessionTile extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.56),
                       ),
                       const SizedBox(width: 5),
-                      Expanded(
+                      Flexible(
                         child: Text(
                           TimeFormatUtil.formatDuration(_duration()),
                           maxLines: 1,
@@ -1250,7 +1344,7 @@ class _HistorySessionTile extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const Spacer(),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(999),
                     child: SizedBox(
