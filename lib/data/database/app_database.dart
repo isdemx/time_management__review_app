@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 class AppDatabase {
   static const databaseName = 'time_tracker_v2.db';
-  static const databaseVersion = 4;
+  static const databaseVersion = 5;
 
   static Database? _database;
 
@@ -31,6 +31,10 @@ class AppDatabase {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         color TEXT NOT NULL,
+        daily_limit_minutes INTEGER,
+        session_limit_minutes INTEGER,
+        notify_on_daily_limit_reached INTEGER NOT NULL DEFAULT 1,
+        notify_on_session_limit_reached INTEGER NOT NULL DEFAULT 1,
         archived_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -107,6 +111,7 @@ class AppDatabase {
     );
     await _createTemplateSchema(db);
     await _createDailyRhythmSchema(db);
+    await _createSocialAppTrackingSchema(db);
   }
 
   Future<void> _upgradeSchema(
@@ -122,6 +127,50 @@ class AppDatabase {
     }
     if (oldVersion < 4) {
       await _migrateStandaloneFocusSessions(db);
+    }
+    if (oldVersion < 5) {
+      await _addTrackableLimitColumns(db);
+      await _createSocialAppTrackingSchema(db);
+    }
+  }
+
+  Future<void> _addTrackableLimitColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'trackables',
+      'daily_limit_minutes',
+      'INTEGER',
+    );
+    await _addColumnIfMissing(
+      db,
+      'trackables',
+      'session_limit_minutes',
+      'INTEGER',
+    );
+    await _addColumnIfMissing(
+      db,
+      'trackables',
+      'notify_on_daily_limit_reached',
+      'INTEGER NOT NULL DEFAULT 1',
+    );
+    await _addColumnIfMissing(
+      db,
+      'trackables',
+      'notify_on_session_limit_reached',
+      'INTEGER NOT NULL DEFAULT 1',
+    );
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = columns.any((row) => row['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
     }
   }
 
@@ -225,6 +274,64 @@ class AppDatabase {
         created_at TEXT NOT NULL,
         FOREIGN KEY(day_session_id) REFERENCES day_sessions(id)
       )
+    ''');
+  }
+
+  Future<void> _createSocialAppTrackingSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tracked_external_apps (
+        id TEXT PRIMARY KEY,
+        package_name TEXT NOT NULL UNIQUE,
+        app_name TEXT NOT NULL,
+        icon_path TEXT,
+        linked_activity_id TEXT,
+        is_enabled INTEGER NOT NULL,
+        daily_limit_minutes INTEGER,
+        session_limit_minutes INTEGER,
+        notify_on_open INTEGER NOT NULL,
+        notify_on_daily_limit_reached INTEGER NOT NULL,
+        notify_on_session_limit_reached INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(linked_activity_id) REFERENCES trackables(id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_tracked_external_apps_enabled
+      ON tracked_external_apps(is_enabled, package_name)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS external_app_usage_days (
+        id TEXT PRIMARY KEY,
+        package_name TEXT NOT NULL,
+        date TEXT NOT NULL,
+        total_seconds INTEGER NOT NULL,
+        open_count INTEGER NOT NULL,
+        first_opened_at TEXT,
+        last_opened_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_external_app_usage_days_package_date
+      ON external_app_usage_days(package_name, date)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS external_app_usage_sessions (
+        id TEXT PRIMARY KEY,
+        package_name TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        duration_seconds INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_external_app_usage_sessions_package_started
+      ON external_app_usage_sessions(package_name, started_at)
     ''');
   }
 

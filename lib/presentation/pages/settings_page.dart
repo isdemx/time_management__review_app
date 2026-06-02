@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:in_app_review/in_app_review.dart';
@@ -5,6 +7,7 @@ import 'package:time_tracker/application/active_session_bar/active_session_bar_s
 import 'package:time_tracker/application/active_session_bar/active_session_visibility_settings.dart';
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_settings.dart';
+import 'package:time_tracker/features/social_app_tracking/presentation/screens/social_app_tracking_settings_screen.dart';
 import 'package:time_tracker/presentation/onboarding/onboarding_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -227,6 +230,24 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
             const SizedBox(height: 34),
+            const _SettingsSectionLabel('Social Tracking'),
+            const SizedBox(height: 10),
+            _GlassSettingsPanel(
+              children: [
+                _AboutSettingTile(
+                  icon: Icons.hourglass_bottom_rounded,
+                  iconColor: const Color(0xFF19D3C5),
+                  title: Platform.isIOS
+                      ? 'Screen Time tracking'
+                      : 'Social apps tracking',
+                  subtitle: Platform.isIOS
+                      ? 'iOS-specific app tracking status'
+                      : 'Usage Access, limits and soft reminders',
+                  onTap: _openSocialTracking,
+                ),
+              ],
+            ),
+            const SizedBox(height: 34),
             const _SettingsSectionLabel('Onboarding'),
             const SizedBox(height: 10),
             _GlassSettingsPanel(
@@ -294,6 +315,14 @@ class _SettingsPageState extends State<SettingsPage> {
             Navigator.of(context).popUntil((route) => route.isFirst);
           },
         ),
+      ),
+    );
+  }
+
+  Future<void> _openSocialTracking() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const SocialAppTrackingSettingsScreen(),
       ),
     );
   }

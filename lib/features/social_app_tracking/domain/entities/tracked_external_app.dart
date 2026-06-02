@@ -1,53 +1,63 @@
-class Trackable {
+class TrackedExternalApp {
   final String id;
-  final String name;
-  final String color;
+  final String packageName;
+  final String appName;
+  final String? iconPath;
+  final String? linkedActivityId;
+  final bool isEnabled;
   final int? dailyLimitMinutes;
   final int? sessionLimitMinutes;
+  final bool notifyOnOpen;
   final bool notifyOnDailyLimitReached;
   final bool notifyOnSessionLimitReached;
-  final DateTime? archivedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const Trackable({
+  const TrackedExternalApp({
     required this.id,
-    required this.name,
-    required this.color,
+    required this.packageName,
+    required this.appName,
+    required this.isEnabled,
+    required this.notifyOnOpen,
+    required this.notifyOnDailyLimitReached,
+    required this.notifyOnSessionLimitReached,
     required this.createdAt,
     required this.updatedAt,
+    this.iconPath,
+    this.linkedActivityId,
     this.dailyLimitMinutes,
     this.sessionLimitMinutes,
-    this.notifyOnDailyLimitReached = true,
-    this.notifyOnSessionLimitReached = true,
-    this.archivedAt,
   });
 
-  bool get isArchived => archivedAt != null;
-
-  Trackable copyWith({
+  TrackedExternalApp copyWith({
     String? id,
-    String? name,
-    String? color,
+    String? packageName,
+    String? appName,
+    String? iconPath,
+    String? linkedActivityId,
+    bool? isEnabled,
     int? dailyLimitMinutes,
     int? sessionLimitMinutes,
+    bool? notifyOnOpen,
     bool? notifyOnDailyLimitReached,
     bool? notifyOnSessionLimitReached,
-    DateTime? archivedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
-    return Trackable(
+    return TrackedExternalApp(
       id: id ?? this.id,
-      name: name ?? this.name,
-      color: color ?? this.color,
+      packageName: packageName ?? this.packageName,
+      appName: appName ?? this.appName,
+      iconPath: iconPath ?? this.iconPath,
+      linkedActivityId: linkedActivityId ?? this.linkedActivityId,
+      isEnabled: isEnabled ?? this.isEnabled,
       dailyLimitMinutes: dailyLimitMinutes ?? this.dailyLimitMinutes,
       sessionLimitMinutes: sessionLimitMinutes ?? this.sessionLimitMinutes,
+      notifyOnOpen: notifyOnOpen ?? this.notifyOnOpen,
       notifyOnDailyLimitReached:
           notifyOnDailyLimitReached ?? this.notifyOnDailyLimitReached,
       notifyOnSessionLimitReached:
           notifyOnSessionLimitReached ?? this.notifyOnSessionLimitReached,
-      archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

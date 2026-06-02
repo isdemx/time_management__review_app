@@ -20,6 +20,12 @@ import 'package:time_tracker/domain/repositories/daily_rhythm_repository.dart';
 import 'package:time_tracker/domain/repositories/session_v2_repository.dart';
 import 'package:time_tracker/domain/repositories/timeline_repository.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
+import 'package:time_tracker/features/social_app_tracking/data/repositories/social_app_tracking_repository_impl.dart';
+import 'package:time_tracker/features/social_app_tracking/domain/repositories/social_app_tracking_repository.dart';
+import 'package:time_tracker/features/social_app_tracking/services/external_app_monitor_service.dart';
+import 'package:time_tracker/features/social_app_tracking/services/installed_apps_service.dart';
+import 'package:time_tracker/features/social_app_tracking/services/social_app_notification_service.dart';
+import 'package:time_tracker/features/social_app_tracking/services/usage_access_permission_service.dart';
 import 'package:time_tracker/infrastructure/active_session_bar/flutter_local_notifications_active_session_bar_platform.dart';
 import 'package:time_tracker/infrastructure/active_session_bar/live_activities_active_session_bar_platform.dart';
 import 'package:time_tracker/presentation/navigation/app_navigator.dart';
@@ -38,6 +44,9 @@ void main() async {
   final dailyRhythmRepository = DailyRhythmRepositoryImpl(
     appDatabase: appDatabase,
   );
+  final socialAppTrackingRepository = SocialAppTrackingRepositoryImpl(
+    appDatabase: appDatabase,
+  );
   await TemplateSeedService(
     appDatabase: appDatabase,
   ).seedDefaultTemplatesIfNeeded();
@@ -54,6 +63,20 @@ void main() async {
     timelineRepository: timelineRepository,
     trackableRepository: trackableRepository,
   );
+  final usageAccessPermissionService = UsageAccessPermissionService();
+  final installedAppsService = InstalledAppsService();
+  final socialAppNotificationService = SocialAppNotificationService(
+    plugin: FlutterLocalNotificationsPlugin(),
+  );
+  final externalAppMonitorService = ExternalAppMonitorService(
+    installedAppsService: installedAppsService,
+    permissionService: usageAccessPermissionService,
+    trackingRepository: socialAppTrackingRepository,
+    notificationService: socialAppNotificationService,
+    sessionRepository: sessionV2Repository,
+    timelineRepository: timelineRepository,
+    trackableRepository: trackableRepository,
+  );
   await activeSessionBarService.initialize();
   await dailyRhythmNotificationService.initialize(
     onPayload: (payload) {
@@ -61,6 +84,18 @@ void main() async {
     },
   );
   await dailyRhythmNotificationService.scheduleDailyRhythmNotifications();
+  await socialAppNotificationService.initialize(
+    onPayload: (payload) async {
+      final sessionId =
+          await externalAppMonitorService.handleNotificationPayload(
+        payload,
+      );
+      if (sessionId != null) {
+        AppNavigator.openSession(sessionId);
+      }
+    },
+  );
+  await externalAppMonitorService.startIfEnabled();
   activeSessionBarService.commands.listen(
     AppNavigator.handleActiveSessionBarCommand,
   );
@@ -80,6 +115,9 @@ void main() async {
         RepositoryProvider<DailyRhythmRepository>.value(
           value: dailyRhythmRepository,
         ),
+        RepositoryProvider<SocialAppTrackingRepository>.value(
+          value: socialAppTrackingRepository,
+        ),
         RepositoryProvider<ActiveSessionBarService>.value(
           value: activeSessionBarService,
         ),
@@ -91,6 +129,18 @@ void main() async {
         ),
         RepositoryProvider<PaywallService>.value(
           value: paywallService,
+        ),
+        RepositoryProvider<UsageAccessPermissionService>.value(
+          value: usageAccessPermissionService,
+        ),
+        RepositoryProvider<InstalledAppsService>.value(
+          value: installedAppsService,
+        ),
+        RepositoryProvider<SocialAppNotificationService>.value(
+          value: socialAppNotificationService,
+        ),
+        RepositoryProvider<ExternalAppMonitorService>.value(
+          value: externalAppMonitorService,
         ),
       ],
       child: AppThemeScope(
