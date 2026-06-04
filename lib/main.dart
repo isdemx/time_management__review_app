@@ -8,8 +8,6 @@ import 'package:time_tracker/application/active_session_bar/active_session_bar_p
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
-import 'package:time_tracker/application/paywall/apphud_service.dart';
-import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/application/templates/template_seed_service.dart';
 import 'package:time_tracker/data/database/app_database.dart';
 import 'package:time_tracker/data/repositories/daily_rhythm_repository_impl.dart';
@@ -20,6 +18,8 @@ import 'package:time_tracker/domain/repositories/daily_rhythm_repository.dart';
 import 'package:time_tracker/domain/repositories/session_v2_repository.dart';
 import 'package:time_tracker/domain/repositories/timeline_repository.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
+import 'package:time_tracker/features/ios_focus_apps/services/ios_focus_apps_settings_service.dart';
+import 'package:time_tracker/features/ios_focus_apps/services/ios_screen_time_service.dart';
 import 'package:time_tracker/features/social_app_tracking/data/repositories/social_app_tracking_repository_impl.dart';
 import 'package:time_tracker/features/social_app_tracking/domain/repositories/social_app_tracking_repository.dart';
 import 'package:time_tracker/features/social_app_tracking/services/external_app_monitor_service.dart';
@@ -52,7 +52,8 @@ void main() async {
   ).seedDefaultTemplatesIfNeeded();
   final themeController = AppThemeController();
   final onboardingService = OnboardingService();
-  final paywallService = PaywallService(apphudService: ApphudService());
+  final iosScreenTimeService = MethodChannelIOSScreenTimeService();
+  final iosFocusAppsSettingsService = IOSFocusAppsSettingsService();
   final activeSessionBarService = ActiveSessionBarService(
     platform: _activeSessionBarPlatform(),
   );
@@ -127,8 +128,11 @@ void main() async {
         RepositoryProvider<OnboardingService>.value(
           value: onboardingService,
         ),
-        RepositoryProvider<PaywallService>.value(
-          value: paywallService,
+        RepositoryProvider<IOSScreenTimeService>.value(
+          value: iosScreenTimeService,
+        ),
+        RepositoryProvider<IOSFocusAppsSettingsService>.value(
+          value: iosFocusAppsSettingsService,
         ),
         RepositoryProvider<UsageAccessPermissionService>.value(
           value: usageAccessPermissionService,

@@ -5,7 +5,6 @@ import 'package:time_tracker/application/onboarding/onboarding_cubit.dart';
 import 'package:time_tracker/application/onboarding/onboarding_models.dart';
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
 import 'package:time_tracker/presentation/onboarding/att_pre_prompt_page.dart';
-import 'package:time_tracker/presentation/paywall/paywall_page.dart';
 
 class OnboardingPage extends StatelessWidget {
   final VoidCallback onCompleted;
@@ -93,11 +92,35 @@ class _OnboardingView extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => showAtt
             ? AttPrePromptPage(onCompleted: onCompleted)
-            : PaywallPage(
-                source: 'onboarding',
-                onCompleted: onCompleted,
-              ),
+            : _OnboardingCompletePage(onCompleted: onCompleted),
       ),
+    );
+  }
+}
+
+class _OnboardingCompletePage extends StatefulWidget {
+  final VoidCallback onCompleted;
+
+  const _OnboardingCompletePage({required this.onCompleted});
+
+  @override
+  State<_OnboardingCompletePage> createState() =>
+      _OnboardingCompletePageState();
+}
+
+class _OnboardingCompletePageState extends State<_OnboardingCompletePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onCompleted();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
     );
   }
 }

@@ -22,6 +22,10 @@
 		C4F2A1019E184E8BB5E6D002 /* ChronikaLiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */; };
 		C4F2A1019E184E8BB5E6D003 /* ChronikaLiveActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */; };
 		C4F2A1019E184E8BB5E6D004 /* ChronikaLiveActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */; };
+		D1A100000000000000000001 /* ChronikaDeviceActivityMonitorExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000013 /* ChronikaDeviceActivityMonitorExtension.swift */; };
+		D1A100000000000000000002 /* ChronikaDeviceActivityMonitorExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000012 /* ChronikaDeviceActivityMonitorExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D2A100000000000000000001 /* ChronikaShieldConfigurationExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000013 /* ChronikaShieldConfigurationExtension.swift */; };
+		D2A100000000000000000002 /* ChronikaShieldConfigurationExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000012 /* ChronikaShieldConfigurationExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,6 +42,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = A1B2C3D4E5F60718293A4B50;
 			remoteInfo = ChronikaLiveActivityExtension;
+		};
+		D1A100000000000000000038 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D1A100000000000000000030;
+			remoteInfo = ChronikaDeviceActivityMonitorExtension;
+		};
+		D2A100000000000000000038 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D2A100000000000000000030;
+			remoteInfo = ChronikaShieldConfigurationExtension;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -59,6 +77,8 @@
 			dstSubfolderSpec = 13;
 			files = (
 				A1B2C3D4E5F60718293A4B5D /* ChronikaLiveActivityExtension.appex in Embed App Extensions */,
+				D1A100000000000000000002 /* ChronikaDeviceActivityMonitorExtension.appex in Embed App Extensions */,
+				D2A100000000000000000002 /* ChronikaShieldConfigurationExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -93,6 +113,14 @@
 		C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaLiveActivityShared.swift; sourceTree = "<group>"; };
 		C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaLiveActivityIntents.swift; sourceTree = "<group>"; };
 		D189E4EFA062754FD678760D /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
+		D1A100000000000000000010 /* ChronikaDeviceActivityMonitorExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ChronikaDeviceActivityMonitorExtension.entitlements; sourceTree = "<group>"; };
+		D1A100000000000000000011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D1A100000000000000000012 /* ChronikaDeviceActivityMonitorExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ChronikaDeviceActivityMonitorExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1A100000000000000000013 /* ChronikaDeviceActivityMonitorExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaDeviceActivityMonitorExtension.swift; sourceTree = "<group>"; };
+		D2A100000000000000000010 /* ChronikaShieldConfigurationExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ChronikaShieldConfigurationExtension.entitlements; sourceTree = "<group>"; };
+		D2A100000000000000000011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D2A100000000000000000012 /* ChronikaShieldConfigurationExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ChronikaShieldConfigurationExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D2A100000000000000000013 /* ChronikaShieldConfigurationExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaShieldConfigurationExtension.swift; sourceTree = "<group>"; };
 		E1849EED935EE30DF9A34827 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		E4E7DB4DB12D153C6A6AA7DB /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		FB347A66885A353B5BF028A0 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
@@ -116,6 +144,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1B2C3D4E5F60718293A4B52 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1A100000000000000000032 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2A100000000000000000032 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -163,6 +205,8 @@
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
 				A1B2C3D4E5F60718293A4B54 /* ChronikaLiveActivityExtension */,
+				D1A100000000000000000020 /* ChronikaDeviceActivityMonitorExtension */,
+				D2A100000000000000000020 /* ChronikaShieldConfigurationExtension */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				7D01247D89A78E446693BECD /* Pods */,
@@ -175,6 +219,8 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				A1B2C3D4E5F60718293A4B5A /* ChronikaLiveActivityExtension.appex */,
+				D1A100000000000000000012 /* ChronikaDeviceActivityMonitorExtension.appex */,
+				D2A100000000000000000012 /* ChronikaShieldConfigurationExtension.appex */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
 			);
 			name = Products;
@@ -215,6 +261,26 @@
 				9034FFB1341F8B64E01297BF /* Pods_RunnerTests.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		D1A100000000000000000020 /* ChronikaDeviceActivityMonitorExtension */ = {
+			isa = PBXGroup;
+			children = (
+				D1A100000000000000000013 /* ChronikaDeviceActivityMonitorExtension.swift */,
+				D1A100000000000000000011 /* Info.plist */,
+				D1A100000000000000000010 /* ChronikaDeviceActivityMonitorExtension.entitlements */,
+			);
+			path = ChronikaDeviceActivityMonitorExtension;
+			sourceTree = "<group>";
+		};
+		D2A100000000000000000020 /* ChronikaShieldConfigurationExtension */ = {
+			isa = PBXGroup;
+			children = (
+				D2A100000000000000000013 /* ChronikaShieldConfigurationExtension.swift */,
+				D2A100000000000000000011 /* Info.plist */,
+				D2A100000000000000000010 /* ChronikaShieldConfigurationExtension.entitlements */,
+			);
+			path = ChronikaShieldConfigurationExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -259,6 +325,8 @@
 			);
 			dependencies = (
 				A1B2C3D4E5F60718293A4B5F /* PBXTargetDependency */,
+				D1A100000000000000000039 /* PBXTargetDependency */,
+				D2A100000000000000000039 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -282,6 +350,40 @@
 			productReference = A1B2C3D4E5F60718293A4B5A /* ChronikaLiveActivityExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		D1A100000000000000000030 /* ChronikaDeviceActivityMonitorExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D1A100000000000000000034 /* Build configuration list for PBXNativeTarget "ChronikaDeviceActivityMonitorExtension" */;
+			buildPhases = (
+				D1A100000000000000000031 /* Sources */,
+				D1A100000000000000000032 /* Frameworks */,
+				D1A100000000000000000033 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ChronikaDeviceActivityMonitorExtension;
+			productName = ChronikaDeviceActivityMonitorExtension;
+			productReference = D1A100000000000000000012 /* ChronikaDeviceActivityMonitorExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		D2A100000000000000000030 /* ChronikaShieldConfigurationExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D2A100000000000000000034 /* Build configuration list for PBXNativeTarget "ChronikaShieldConfigurationExtension" */;
+			buildPhases = (
+				D2A100000000000000000031 /* Sources */,
+				D2A100000000000000000032 /* Frameworks */,
+				D2A100000000000000000033 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ChronikaShieldConfigurationExtension;
+			productName = ChronikaShieldConfigurationExtension;
+			productReference = D2A100000000000000000012 /* ChronikaShieldConfigurationExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -303,6 +405,12 @@
 					A1B2C3D4E5F60718293A4B50 = {
 						CreatedOnToolsVersion = 15.0;
 					};
+					D1A100000000000000000030 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					D2A100000000000000000030 = {
+						CreatedOnToolsVersion = 15.0;
+					};
 				};
 			};
 			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
@@ -320,6 +428,8 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				A1B2C3D4E5F60718293A4B50 /* ChronikaLiveActivityExtension */,
+				D1A100000000000000000030 /* ChronikaDeviceActivityMonitorExtension */,
+				D2A100000000000000000030 /* ChronikaShieldConfigurationExtension */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 			);
 		};
@@ -345,6 +455,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1B2C3D4E5F60718293A4B58 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1A100000000000000000033 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2A100000000000000000033 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -424,6 +548,28 @@
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
 		};
+		A4AA484F6408461D934D7CAD /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-RunnerTests-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
 		C9A7D0B12F0B4E9180A9C331 /* Re-sign Embedded Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -454,28 +600,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"${SRCROOT}/scripts/resign_embedded_frameworks.sh\"";
-		};
-		A4AA484F6408461D934D7CAD /* [CP] Check Pods Manifest.lock */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
-				"${PODS_ROOT}/Manifest.lock",
-			);
-			name = "[CP] Check Pods Manifest.lock";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-RunnerTests-checkManifestLockResult.txt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -509,6 +633,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D1A100000000000000000031 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1A100000000000000000001 /* ChronikaDeviceActivityMonitorExtension.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2A100000000000000000031 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D2A100000000000000000001 /* ChronikaShieldConfigurationExtension.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -521,6 +661,16 @@
 			isa = PBXTargetDependency;
 			target = A1B2C3D4E5F60718293A4B50 /* ChronikaLiveActivityExtension */;
 			targetProxy = A1B2C3D4E5F60718293A4B5E /* PBXContainerItemProxy */;
+		};
+		D1A100000000000000000039 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D1A100000000000000000030 /* ChronikaDeviceActivityMonitorExtension */;
+			targetProxy = D1A100000000000000000038 /* PBXContainerItemProxy */;
+		};
+		D2A100000000000000000039 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D2A100000000000000000030 /* ChronikaShieldConfigurationExtension */;
+			targetProxy = D2A100000000000000000038 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -601,6 +751,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = S4XZW73SZ4;
 				ENABLE_BITCODE = NO;
@@ -611,6 +763,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.greenmonster.timereviewer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -656,6 +809,7 @@
 			baseConfigurationReference = 086A17488F448BB2FEB85C02 /* Pods-RunnerTests.profile.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = S4XZW73SZ4;
@@ -663,6 +817,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.timeTracker.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
 			};
@@ -882,6 +1037,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = ChronikaLiveActivityExtension/ChronikaLiveActivityExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = S4XZW73SZ4;
@@ -896,6 +1052,171 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.greenmonster.timereviewer.liveactivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
+		D1A100000000000000000035 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = ChronikaDeviceActivityMonitorExtension/ChronikaDeviceActivityMonitorExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S4XZW73SZ4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ChronikaDeviceActivityMonitorExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.greenmonster.timereviewer.deviceactivitymonitor;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D1A100000000000000000036 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = ChronikaDeviceActivityMonitorExtension/ChronikaDeviceActivityMonitorExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S4XZW73SZ4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ChronikaDeviceActivityMonitorExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.greenmonster.timereviewer.deviceactivitymonitor;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D1A100000000000000000037 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = ChronikaDeviceActivityMonitorExtension/ChronikaDeviceActivityMonitorExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S4XZW73SZ4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ChronikaDeviceActivityMonitorExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.greenmonster.timereviewer.deviceactivitymonitor;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
+		D2A100000000000000000035 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = ChronikaShieldConfigurationExtension/ChronikaShieldConfigurationExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S4XZW73SZ4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ChronikaShieldConfigurationExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.greenmonster.timereviewer.shieldconfiguration;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D2A100000000000000000036 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = ChronikaShieldConfigurationExtension/ChronikaShieldConfigurationExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S4XZW73SZ4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ChronikaShieldConfigurationExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.greenmonster.timereviewer.shieldconfiguration;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D2A100000000000000000037 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = ChronikaShieldConfigurationExtension/ChronikaShieldConfigurationExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S4XZW73SZ4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ChronikaShieldConfigurationExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.greenmonster.timereviewer.shieldconfiguration;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -941,6 +1262,26 @@
 				A1B2C3D4E5F60718293A4B60 /* Debug */,
 				A1B2C3D4E5F60718293A4B61 /* Release */,
 				A1B2C3D4E5F60718293A4B62 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D1A100000000000000000034 /* Build configuration list for PBXNativeTarget "ChronikaDeviceActivityMonitorExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1A100000000000000000035 /* Debug */,
+				D1A100000000000000000036 /* Release */,
+				D1A100000000000000000037 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D2A100000000000000000034 /* Build configuration list for PBXNativeTarget "ChronikaShieldConfigurationExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D2A100000000000000000035 /* Debug */,
+				D2A100000000000000000036 /* Release */,
+				D2A100000000000000000037 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

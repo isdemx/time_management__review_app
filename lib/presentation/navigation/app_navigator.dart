@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_models.dart';
 import 'package:time_tracker/domain/repositories/daily_rhythm_repository.dart';
+import 'package:time_tracker/domain/repositories/trackable_repository.dart';
 import 'package:time_tracker/presentation/pages/daily_rhythm/evening_reflection_page.dart';
+import 'package:time_tracker/presentation/pages/daily_rhythm/focus_mode_page.dart';
 import 'package:time_tracker/presentation/pages/daily_rhythm/morning_start_page.dart';
 import 'package:time_tracker/presentation/pages/session_detail_page.dart';
 
@@ -57,6 +59,27 @@ class AppNavigator {
       navigator.push(
         MaterialPageRoute<void>(
           builder: (_) => EveningReflectionPage(daySession: daySession),
+        ),
+      );
+      return;
+    }
+
+    if (payload.startsWith('daily_rhythm:focus_finished:')) {
+      final activityId = payload.split(':').last;
+      final repository = context.read<TrackableRepository>();
+      final trackable = await repository.getTrackable(activityId);
+      if (trackable == null) {
+        return;
+      }
+      final modes = await repository.getModes(activityId);
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => FocusModePage(
+            daySessionId: null,
+            activityId: trackable.id,
+            activityName: trackable.name,
+            modes: modes,
+          ),
         ),
       );
     }

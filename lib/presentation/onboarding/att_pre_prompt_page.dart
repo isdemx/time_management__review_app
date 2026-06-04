@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
-import 'package:time_tracker/presentation/paywall/paywall_page.dart';
 
 class AttPrePromptPage extends StatelessWidget {
   final VoidCallback onCompleted;
@@ -39,7 +38,7 @@ class AttPrePromptPage extends StatelessWidget {
                       .read<OnboardingService>()
                       .requestTrackingAuthorization();
                   if (!context.mounted) return;
-                  _openPaywall(context);
+                  onCompleted();
                 },
                 child: const Text('Continue'),
               ),
@@ -47,23 +46,12 @@ class AttPrePromptPage extends StatelessWidget {
                 onPressed: () async {
                   await context.read<OnboardingService>().markAttPromptShown();
                   if (!context.mounted) return;
-                  _openPaywall(context);
+                  onCompleted();
                 },
                 child: const Text('Not Now'),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  void _openPaywall(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PaywallPage(
-          source: 'onboarding',
-          onCompleted: onCompleted,
         ),
       ),
     );

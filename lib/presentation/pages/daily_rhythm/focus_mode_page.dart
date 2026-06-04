@@ -1,24 +1,39 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
 import 'package:time_tracker/domain/entities/focus_session.dart';
+import 'package:time_tracker/domain/entities/trackable_mode.dart';
 import 'package:time_tracker/domain/repositories/daily_rhythm_repository.dart';
+import 'package:time_tracker/features/ios_focus_apps/services/ios_focus_apps_settings_service.dart';
+import 'package:time_tracker/features/ios_focus_apps/services/ios_screen_time_service.dart';
 
 class FocusModePage extends StatefulWidget {
   final String? daySessionId;
   final String activityId;
   final String activityName;
+  final List<TrackableMode> modes;
+  final String? activeModeId;
+  final ValueChanged<String>? onModeSelected;
+  final VoidCallback? onSwitchActivityRequested;
 
   const FocusModePage({
     super.key,
     required this.daySessionId,
     required this.activityId,
     required this.activityName,
+    this.modes = const [],
+    this.activeModeId,
+    this.onModeSelected,
+    this.onSwitchActivityRequested,
   });
 
   @override
@@ -26,38 +41,117 @@ class FocusModePage extends StatefulWidget {
 }
 
 class _FocusModePageState extends State<FocusModePage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const _uuid = Uuid();
+  static const _ambientLoopDuration = Duration(seconds: 4);
+  static const _ambientCrossfadeDuration = Duration(milliseconds: 700);
+  static const _ambientCrossfadeSteps = 14;
+  static const _ambientVolume = 0.42;
 
   late final DailyRhythmRepository _repository;
   late final DailyRhythmNotificationService _notificationService;
+  late final IOSScreenTimeService _screenTimeService;
+  late final IOSFocusAppsSettingsService _focusAppsSettingsService;
   late final AnimationController _ambientController;
+  late final AnimationController _finishHoldController;
+  late final List<AudioPlayer> _ambientPlayers;
+  late final AudioPlayer _dingPlayer;
   Timer? _timer;
+  Timer? _finishPulseTimer;
+  Timer? _ambientLoopTimer;
+  Timer? _ambientFadeTimer;
   FocusSession? _session;
+  DateTime? _endsAt;
   int _durationMinutes = 25;
   Duration _remaining = const Duration(minutes: 25);
   AmbientSound _ambientSound = AmbientSound.brownNoise;
   bool _running = false;
+  bool _expired = false;
+  bool _keepScreenOn = false;
+  bool _focusAppsBlockingEnabled = false;
+  int _activeAmbientPlayerIndex = 0;
+  String? _ambientAssetPath;
+  String? _activeModeId;
 
   @override
   void initState() {
     super.initState();
     _repository = context.read<DailyRhythmRepository>();
     _notificationService = context.read<DailyRhythmNotificationService>();
+    _screenTimeService = context.read<IOSScreenTimeService>();
+    _focusAppsSettingsService = context.read<IOSFocusAppsSettingsService>();
     _ambientController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 8200),
     )..repeat();
+    _finishHoldController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          _finishPulseTimer?.cancel();
+          HapticFeedback.heavyImpact();
+          _finish();
+        }
+      });
+    _ambientPlayers = [AudioPlayer(), AudioPlayer()];
+    for (final player in _ambientPlayers) {
+      player.setReleaseMode(ReleaseMode.stop);
+      player.setVolume(0);
+    }
+    _dingPlayer = AudioPlayer();
+    WidgetsBinding.instance.addObserver(this);
+    _activeModeId = widget.activeModeId;
     _durationMinutes = _defaultDurationFor(widget.activityName);
     _remaining = Duration(minutes: _durationMinutes);
+    _loadFocusAppsSettings();
     _loadActiveFocus();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _finishPulseTimer?.cancel();
+    _ambientLoopTimer?.cancel();
+    _ambientFadeTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    WakelockPlus.disable();
+    for (final player in _ambientPlayers) {
+      player.dispose();
+    }
+    _dingPlayer.dispose();
+    _finishHoldController.dispose();
     _ambientController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant FocusModePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeModeId != widget.activeModeId) {
+      _activeModeId = widget.activeModeId;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncRemainingWithClock();
+    }
+  }
+
+  Future<void> _loadFocusAppsSettings() async {
+    final settings = await _focusAppsSettingsService.load();
+    final authorized = await _screenTimeService.isAuthorized();
+    final hasSelection = await _screenTimeService.hasSelection();
+    if (!mounted) return;
+    setState(() {
+      _focusAppsBlockingEnabled = Platform.isIOS &&
+          settings.focusModeBlockingEnabled &&
+          settings.isEnabled &&
+          authorized &&
+          hasSelection;
+    });
   }
 
   Future<void> _loadActiveFocus() async {
@@ -67,19 +161,25 @@ class _FocusModePageState extends State<FocusModePage>
     );
     if (!mounted) return;
     if (active == null || active.activityId != widget.activityId) return;
-    final elapsed = DateTime.now().difference(active.startedAt);
     final planned = Duration(minutes: active.plannedDurationMinutes);
+    final endsAt = active.startedAt.add(planned);
+    final remaining = endsAt.difference(DateTime.now());
     setState(() {
       _session = active;
+      _endsAt = endsAt;
       _durationMinutes = active.plannedDurationMinutes;
-      _remaining = planned - elapsed;
+      _remaining =
+          active.status == FocusSessionStatus.active ? remaining : planned;
       _ambientSound = _supportedAmbient(active.ambientSound);
       if (_remaining.isNegative) {
         _remaining = Duration.zero;
       }
       _running = active.status == FocusSessionStatus.active;
+      _expired = _running && _remaining == Duration.zero;
     });
-    if (_running) {
+    if (_expired) {
+      await _completeExpiredFocus();
+    } else if (_running) {
       _startTicker();
     }
   }
@@ -101,37 +201,26 @@ class _FocusModePageState extends State<FocusModePage>
               : FocusSessionMode.custom,
     );
     await _repository.saveFocusSession(session);
+    if (_focusAppsBlockingEnabled) {
+      final settings = await _focusAppsSettingsService.load();
+      await _screenTimeService.configure(settings);
+      await _screenTimeService.startFocusBlocking();
+    }
+    await _playAmbient(_ambientSound);
     await _notificationService.scheduleFocusFinished(
       when: now.add(Duration(minutes: _durationMinutes)),
+      activityId: widget.activityId,
       activityName: widget.activityName,
     );
     if (!mounted) return;
     setState(() {
       _session = session;
+      _endsAt = now.add(Duration(minutes: _durationMinutes));
       _remaining = Duration(minutes: _durationMinutes);
       _running = true;
+      _expired = false;
     });
     _startTicker();
-  }
-
-  Future<void> _togglePause() async {
-    final session = _session;
-    if (session == null) return;
-    final nextStatus =
-        _running ? FocusSessionStatus.paused : FocusSessionStatus.active;
-    _timer?.cancel();
-    setState(() => _running = nextStatus == FocusSessionStatus.active);
-    await _repository.updateFocusSession(session.copyWith(status: nextStatus));
-    if (!mounted) return;
-    if (_running) {
-      await _notificationService.scheduleFocusFinished(
-        when: DateTime.now().add(_remaining),
-        activityName: widget.activityName,
-      );
-      _startTicker();
-    } else {
-      await _notificationService.cancelFocusFinished();
-    }
   }
 
   Future<void> _finish({bool completed = true}) async {
@@ -147,7 +236,15 @@ class _FocusModePageState extends State<FocusModePage>
         ),
       );
     }
+    if (_focusAppsBlockingEnabled) {
+      await _screenTimeService.stopFocusBlocking();
+    }
+    await _stopAmbient();
+    await _dingPlayer.play(AssetSource('audio/focus_done.wav'));
     await _notificationService.cancelFocusFinished();
+    if (_keepScreenOn) {
+      await WakelockPlus.disable();
+    }
     if (!mounted) return;
     Navigator.of(context).pop();
   }
@@ -156,13 +253,32 @@ class _FocusModePageState extends State<FocusModePage>
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!_running) return;
-      final next = _remaining - const Duration(seconds: 1);
+      final next = _currentRemaining();
       if (!mounted) return;
       setState(() => _remaining = next.isNegative ? Duration.zero : next);
       if (next <= Duration.zero) {
         await _completeExpiredFocus();
       }
     });
+  }
+
+  Duration _currentRemaining() {
+    final endsAt = _endsAt;
+    if (endsAt == null) {
+      return _remaining;
+    }
+    final remaining = endsAt.difference(DateTime.now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  Future<void> _syncRemainingWithClock() async {
+    if (!_running) return;
+    final next = _currentRemaining();
+    if (!mounted) return;
+    setState(() => _remaining = next);
+    if (next <= Duration.zero) {
+      await _completeExpiredFocus();
+    }
   }
 
   Future<void> _completeExpiredFocus() async {
@@ -176,213 +292,360 @@ class _FocusModePageState extends State<FocusModePage>
         ),
       );
     }
+    if (_focusAppsBlockingEnabled) {
+      await _screenTimeService.stopFocusBlocking();
+    }
+    await _stopAmbient();
     await _notificationService.cancelFocusFinished();
     if (!mounted) return;
     setState(() {
       _session = null;
+      _endsAt = null;
       _running = false;
-      _remaining = Duration(minutes: _durationMinutes);
+      _remaining = Duration.zero;
+      _expired = true;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Focus session ended. Continue ${widget.activityName}?'),
-        action: SnackBarAction(
-          label: 'OK',
-          onPressed: () {},
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final hasSession = _session != null;
-    final progress = hasSession
-        ? 1 - (_remaining.inSeconds / (_durationMinutes * 60)).clamp(0.0, 1.0)
-        : 0.0;
+    final progress = _expired
+        ? 1.0
+        : hasSession
+            ? 1 -
+                (_remaining.inSeconds / (_durationMinutes * 60)).clamp(0.0, 1.0)
+            : 0.0;
 
     final ambientTheme = _AmbientTheme.forSound(_ambientSound);
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text('Focus'),
-        backgroundColor: Colors.transparent,
-      ),
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: const Alignment(-0.58, -0.88),
-            radius: 1.25,
-            colors: ambientTheme.backgroundColors,
-            stops: const [0, 0.54, 1],
-          ),
-        ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _ambientController,
-                builder: (context, _) {
-                  return CustomPaint(
-                    painter: _AmbientBackdropPainter(
-                      sound: _ambientSound,
-                      phase: _ambientController.value,
-                      theme: ambientTheme,
-                    ),
-                  );
-                },
-              ),
+    return PopScope(
+      canPop: !hasSession,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && hasSession) {
+          _showHoldToFinishHint();
+        }
+      },
+      child: Scaffold(
+        body: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: const Alignment(-0.58, -0.88),
+              radius: 1.25,
+              colors: ambientTheme.backgroundColors,
+              stops: const [0, 0.54, 1],
             ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
-                child: Column(
-                  children: [
-                    Text(
-                      widget.activityName,
-                      style:
-                          Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w900,
-                              ),
-                    ),
-                    const SizedBox(height: 28),
-                    Expanded(
-                      child: Center(
-                        child: SizedBox.square(
-                          dimension: 250,
-                          child: Stack(
-                            alignment: Alignment.center,
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _ambientController,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      painter: _AmbientBackdropPainter(
+                        sound: _ambientSound,
+                        phase: _ambientController.value,
+                        theme: ambientTheme,
+                        active: hasSession,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          if (!hasSession)
+                            _RoundIconButton(
+                              icon: Icons.arrow_back_ios_new_rounded,
+                              tooltip: 'Back',
+                              onTap: () => Navigator.of(context).pop(),
+                            )
+                          else
+                            const SizedBox(width: 38),
+                          const Spacer(),
+                          Column(
                             children: [
-                              CircularProgressIndicator(
-                                value: progress,
-                                strokeWidth: 10,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.08),
-                              ),
-                              CustomPaint(
-                                size: const Size.square(250),
-                                painter: _AnalogFocusPainter(
-                                  progress: progress,
-                                  accent: ambientTheme.accent,
+                              Text(
+                                'FOCUS MODE',
+                                style: TextStyle(
+                                  color: ambientTheme.accent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 2.5,
                                 ),
                               ),
-                              Column(
+                              const SizedBox(height: 8),
+                              Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    _formatDuration(_remaining),
+                                    widget.activityName,
                                     style: Theme.of(context)
                                         .textTheme
-                                        .displayMedium
-                                        ?.copyWith(fontWeight: FontWeight.w300),
+                                        .titleLarge
+                                        ?.copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                        ),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    hasSession
-                                        ? 'Stay with this activity'
-                                        : 'Choose a duration',
-                                    style: TextStyle(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.62),
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    color: Colors.white.withValues(alpha: 0.72),
                                   ),
                                 ],
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                    ),
-                    if (!hasSession) ...[
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final minutes in [25, 50])
-                            ChoiceChip(
-                              label: Text('$minutes min'),
-                              selected: _durationMinutes == minutes,
-                              onSelected: (_) {
-                                setState(() {
-                                  _durationMinutes = minutes;
-                                  _remaining = Duration(minutes: minutes);
-                                });
-                              },
-                            ),
-                          ActionChip(
-                            avatar: const Icon(Icons.tune, size: 18),
-                            label: Text(
-                              _durationMinutes == 25 || _durationMinutes == 50
-                                  ? 'Custom'
-                                  : '$_durationMinutes min',
-                            ),
-                            onPressed: _chooseCustomDuration,
+                          const Spacer(),
+                          _RoundIconButton(
+                            icon: _keepScreenOn
+                                ? Icons.visibility_rounded
+                                : Icons.visibility_off_outlined,
+                            tooltip: _keepScreenOn
+                                ? 'Allow screen sleep'
+                                : 'Keep screen on',
+                            selected: _keepScreenOn,
+                            onTap: _toggleKeepScreenOn,
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 18),
-                      _AmbientSelector(
-                        value: _ambientSound,
-                        onChanged: _setAmbient,
                       ),
                       const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: _startFocus,
-                        icon: const Icon(Icons.timer_outlined),
-                        label: const Text('Start Focus'),
+                      _ModeStrip(
+                        modes: _visibleModes(),
+                        activeModeId: _activeModeId,
+                        accent: ambientTheme.accent,
+                        onSelected: _selectMode,
                       ),
-                    ] else ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _togglePause,
-                              icon: Icon(
-                                  _running ? Icons.pause : Icons.play_arrow),
-                              label: Text(_running ? 'Pause' : 'Resume'),
-                            ),
+                      const SizedBox(height: 18),
+                      Expanded(
+                        child: Center(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final diameter = math.min(
+                                MediaQuery.sizeOf(context).width - 12,
+                                constraints.maxHeight,
+                              );
+                              return SizedBox.square(
+                                dimension: diameter,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    CustomPaint(
+                                      size: Size.square(diameter),
+                                      painter: _AnalogFocusPainter(
+                                        progress: progress,
+                                        accent: ambientTheme.accent,
+                                        secondary: ambientTheme.secondary,
+                                      ),
+                                    ),
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _expired
+                                              ? 'Time is up'
+                                              : _formatDuration(_remaining),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .displayLarge
+                                              ?.copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w300,
+                                                letterSpacing: 0,
+                                              ),
+                                        ),
+                                        if (!hasSession && !_expired) ...[
+                                          const SizedBox(height: 18),
+                                          _DurationSelector(
+                                            selectedMinutes: _durationMinutes,
+                                            compact: true,
+                                            onSelected: (minutes) {
+                                              setState(() {
+                                                _durationMinutes = minutes;
+                                                _remaining =
+                                                    Duration(minutes: minutes);
+                                              });
+                                            },
+                                            onCustom: _chooseCustomDuration,
+                                          ),
+                                        ] else if (_expired) ...[
+                                          const SizedBox(height: 10),
+                                          Text(
+                                            'Add time or switch activity',
+                                            style: TextStyle(
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.62),
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: () => _finish(),
-                              child: const Text('Finish'),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 10),
+                      if (_expired)
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final minutes in [5, 10, 15])
+                              _SmallActionChip(
+                                label: '+$minutes',
+                                onPressed: () => _continueWithTime(minutes),
+                              ),
+                            _SmallActionChip(
+                              label: 'Switch activity',
+                              icon: Icons.swap_horiz_rounded,
+                              onPressed: _switchActivityAndClose,
+                            ),
+                          ],
+                        ),
+                      const SizedBox(height: 14),
                       _AmbientSelector(
                         value: _ambientSound,
                         onChanged: _setAmbient,
+                        subdued: hasSession,
                       ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 8,
-                        children: [
-                          for (final minutes in [5, 10, 15])
-                            ActionChip(
-                              label: Text('+$minutes'),
-                              onPressed: () => _extend(minutes),
-                            ),
-                        ],
-                      ),
-                      TextButton(
-                        onPressed: () => _finish(completed: false),
-                        child: const Text('Cancel'),
-                      ),
+                      const SizedBox(height: 14),
+                      if (!hasSession && !_expired)
+                        _FocusStartButton(
+                          accent: ambientTheme.accent,
+                          secondary: ambientTheme.secondary,
+                          onPressed: _startFocus,
+                        )
+                      else if (hasSession) ...[
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final minutes in [5, 10, 15])
+                              _SmallActionChip(
+                                label: '+$minutes',
+                                onPressed: () => _extend(minutes),
+                                subdued: true,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _HoldFinishButton(
+                          controller: _finishHoldController,
+                          accent: ambientTheme.accent,
+                          onTap: _showHoldToFinishHint,
+                          onHoldStart: _startFinishHold,
+                          onHoldEnd: _cancelFinishHold,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  List<TrackableMode> _visibleModes() {
+    final modes = widget.modes.where((mode) => !mode.isArchived).toList()
+      ..sort((left, right) => left.sortOrder.compareTo(right.sortOrder));
+    if (modes.isNotEmpty) {
+      return modes;
+    }
+    final now = DateTime.now();
+    return [
+      TrackableMode(
+        id: widget.activeModeId ?? TrackableMode.mainName,
+        trackableId: widget.activityId,
+        name: TrackableMode.mainName,
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ];
+  }
+
+  void _selectMode(String modeId) {
+    setState(() => _activeModeId = modeId);
+    widget.onModeSelected?.call(modeId);
+  }
+
+  Future<void> _toggleKeepScreenOn() async {
+    final next = !_keepScreenOn;
+    setState(() => _keepScreenOn = next);
+    if (next) {
+      await WakelockPlus.enable();
+    } else {
+      await WakelockPlus.disable();
+    }
+  }
+
+  Future<void> _continueWithTime(int minutes) async {
+    setState(() {
+      _durationMinutes = minutes;
+      _remaining = Duration(minutes: minutes);
+      _expired = false;
+    });
+    await _startFocus();
+  }
+
+  void _switchActivityAndClose() {
+    widget.onSwitchActivityRequested?.call();
+    Navigator.of(context).pop();
+  }
+
+  void _showHoldToFinishHint() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hold Finish for 3 seconds to end focus.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _startFinishHold() {
+    _finishPulseTimer?.cancel();
+    _finishHoldController.forward(from: 0);
+    HapticFeedback.mediumImpact();
+    _scheduleFinishPulse();
+  }
+
+  void _cancelFinishHold() {
+    _finishPulseTimer?.cancel();
+    if (_finishHoldController.status != AnimationStatus.completed) {
+      _finishHoldController.reverse();
+    }
+  }
+
+  void _scheduleFinishPulse() {
+    if (!_finishHoldController.isAnimating) return;
+    final progress = _finishHoldController.value.clamp(0.0, 1.0);
+    final delayMs = (260 - progress * 190).round().clamp(56, 260);
+    _finishPulseTimer = Timer(Duration(milliseconds: delayMs), () {
+      if (!_finishHoldController.isAnimating || !mounted) return;
+      if (_finishHoldController.value < 0.86) {
+        HapticFeedback.selectionClick();
+      } else {
+        HapticFeedback.mediumImpact();
+      }
+      _scheduleFinishPulse();
+    });
   }
 
   String _formatDuration(Duration duration) {
@@ -442,6 +705,9 @@ class _FocusModePageState extends State<FocusModePage>
     setState(() {
       _durationMinutes = nextDuration;
       _remaining += Duration(minutes: minutes);
+      if (_endsAt != null) {
+        _endsAt = _endsAt!.add(Duration(minutes: minutes));
+      }
     });
     await _repository.updateFocusSession(
       session.copyWith(plannedDurationMinutes: nextDuration),
@@ -449,6 +715,7 @@ class _FocusModePageState extends State<FocusModePage>
     if (_running) {
       await _notificationService.scheduleFocusFinished(
         when: DateTime.now().add(_remaining),
+        activityId: widget.activityId,
         activityName: widget.activityName,
       );
     }
@@ -457,6 +724,7 @@ class _FocusModePageState extends State<FocusModePage>
   Future<void> _setAmbient(AmbientSound value) async {
     final supported = _supportedAmbient(value);
     setState(() => _ambientSound = supported);
+    await _playAmbient(supported);
     final session = _session;
     if (session != null) {
       await _repository.updateFocusSession(
@@ -476,6 +744,88 @@ class _FocusModePageState extends State<FocusModePage>
     };
   }
 
+  Future<void> _playAmbient(AmbientSound sound) async {
+    final asset = _ambientAsset(sound);
+    if (asset == null) {
+      await _stopAmbient();
+      return;
+    }
+    await _startSeamlessAmbient(asset);
+  }
+
+  Future<void> _startSeamlessAmbient(String asset) async {
+    if (_ambientAssetPath == asset) {
+      return;
+    }
+    await _stopAmbient();
+    _ambientAssetPath = asset;
+    _activeAmbientPlayerIndex = 0;
+    final player = _ambientPlayers[_activeAmbientPlayerIndex];
+    await player.play(AssetSource(asset), volume: _ambientVolume);
+    _scheduleAmbientCrossfade();
+  }
+
+  void _scheduleAmbientCrossfade() {
+    _ambientLoopTimer?.cancel();
+    _ambientLoopTimer = Timer(
+      _ambientLoopDuration - _ambientCrossfadeDuration,
+      () {
+        _crossfadeAmbient();
+      },
+    );
+  }
+
+  Future<void> _crossfadeAmbient() async {
+    final asset = _ambientAssetPath;
+    if (asset == null) return;
+    final fromIndex = _activeAmbientPlayerIndex;
+    final toIndex = fromIndex == 0 ? 1 : 0;
+    final from = _ambientPlayers[fromIndex];
+    final to = _ambientPlayers[toIndex];
+
+    await to.stop();
+    await to.play(AssetSource(asset), volume: 0);
+    _ambientFadeTimer?.cancel();
+
+    var step = 0;
+    const steps = _ambientCrossfadeSteps;
+    _ambientFadeTimer = Timer.periodic(
+      _ambientCrossfadeDuration ~/ steps,
+      (timer) async {
+        step += 1;
+        final t = (step / steps).clamp(0.0, 1.0);
+        await from.setVolume(_ambientVolume * (1 - t));
+        await to.setVolume(_ambientVolume * t);
+        if (step >= steps) {
+          timer.cancel();
+          await from.stop();
+          await to.setVolume(_ambientVolume);
+          _activeAmbientPlayerIndex = toIndex;
+          _scheduleAmbientCrossfade();
+        }
+      },
+    );
+  }
+
+  Future<void> _stopAmbient() async {
+    _ambientLoopTimer?.cancel();
+    _ambientFadeTimer?.cancel();
+    _ambientAssetPath = null;
+    for (final player in _ambientPlayers) {
+      await player.stop();
+      await player.setVolume(0);
+    }
+  }
+
+  String? _ambientAsset(AmbientSound sound) {
+    return switch (sound) {
+      AmbientSound.rain => 'audio/focus_rain.wav',
+      AmbientSound.seaWaves => 'audio/focus_sea_waves.wav',
+      AmbientSound.brownNoise => 'audio/focus_noise.wav',
+      _ => null,
+    };
+  }
+
   int _defaultDurationFor(String activityName) {
     final name = activityName.toLowerCase();
     if (name.contains('study')) return 25;
@@ -483,6 +833,436 @@ class _FocusModePageState extends State<FocusModePage>
     if (name.contains('walk')) return 30;
     if (name.contains('work') || name.contains('build')) return 50;
     return 25;
+  }
+}
+
+class _RoundIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool selected;
+
+  const _RoundIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: selected
+            ? Colors.white.withValues(alpha: 0.16)
+            : Colors.white.withValues(alpha: 0.08),
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox.square(
+            dimension: 38,
+            child: Icon(icon, color: Colors.white, size: 19),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeStrip extends StatelessWidget {
+  final List<TrackableMode> modes;
+  final String? activeModeId;
+  final Color accent;
+  final ValueChanged<String> onSelected;
+
+  const _ModeStrip({
+    required this.modes,
+    required this.activeModeId,
+    required this.accent,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: modes.length > 4 ? 76 : 40,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Wrap(
+          direction: Axis.horizontal,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final mode in modes)
+              _ModeChip(
+                label: mode.isMain ? 'Main' : mode.name,
+                selected: activeModeId == mode.id,
+                accent: accent,
+                onTap: () => onSelected(mode.id),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _ModeChip({
+    required this.label,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? accent.withValues(alpha: 0.22)
+          : Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(999),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 72, maxWidth: 132),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected
+                  ? accent.withValues(alpha: 0.52)
+                  : Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color:
+                  selected ? Colors.white : Colors.white.withValues(alpha: 0.7),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DurationSelector extends StatelessWidget {
+  final int selectedMinutes;
+  final ValueChanged<int> onSelected;
+  final VoidCallback onCustom;
+  final bool compact;
+
+  const _DurationSelector({
+    required this.selectedMinutes,
+    required this.onSelected,
+    required this.onCustom,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final minutes in [25, 50])
+            _DurationSegment(
+              label: '${minutes}m',
+              selected: selectedMinutes == minutes,
+              compact: compact,
+              onTap: () => onSelected(minutes),
+            ),
+          _DurationSegment(
+            label: selectedMinutes == 25 || selectedMinutes == 50
+                ? 'Custom'
+                : '${selectedMinutes}m',
+            selected: selectedMinutes != 25 && selectedMinutes != 50,
+            compact: compact,
+            onTap: onCustom,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DurationSegment extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool compact;
+
+  const _DurationSegment({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color:
+          selected ? Colors.white.withValues(alpha: 0.16) : Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 12 : 15,
+            vertical: compact ? 7 : 8,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.62),
+              fontSize: compact ? 11 : 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FocusStartButton extends StatelessWidget {
+  final Color accent;
+  final Color secondary;
+  final VoidCallback onPressed;
+
+  const _FocusStartButton({
+    required this.accent,
+    required this.secondary,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 220,
+      height: 64,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: LinearGradient(
+            colors: [secondary.withValues(alpha: 0.92), accent],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.28),
+              blurRadius: 26,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.play_arrow_rounded, color: Colors.white, size: 34),
+                SizedBox(width: 10),
+                Text(
+                  'Start',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HoldFinishButton extends StatelessWidget {
+  final Animation<double> controller;
+  final Color accent;
+  final VoidCallback onTap;
+  final VoidCallback onHoldStart;
+  final VoidCallback onHoldEnd;
+
+  const _HoldFinishButton({
+    required this.controller,
+    required this.accent,
+    required this.onTap,
+    required this.onHoldStart,
+    required this.onHoldEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final progress = controller.value.clamp(0.0, 1.0);
+        return GestureDetector(
+          onTap: onTap,
+          onLongPressStart: (_) => onHoldStart(),
+          onLongPressEnd: (_) => onHoldEnd(),
+          onLongPressCancel: onHoldEnd,
+          child: Container(
+            width: double.infinity,
+            height: 58,
+            constraints: const BoxConstraints(maxWidth: 330),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              color: const Color(0xFFFF6A7A).withValues(alpha: 0.92),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF6A7A).withValues(
+                    alpha: 0.18 + progress * 0.26,
+                  ),
+                  blurRadius: 18 + progress * 24,
+                  spreadRadius: progress * 5,
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: progress,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            accent.withValues(alpha: 0.90),
+                            Colors.white.withValues(alpha: 0.24),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  CustomPaint(
+                    painter: _FinishPulsePainter(
+                      progress: progress,
+                      accent: Colors.white,
+                    ),
+                  ),
+                  Center(
+                    child: Text(
+                      progress > 0 ? '${(3 - progress * 3).ceil()}' : 'Finish',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FinishPulsePainter extends CustomPainter {
+  final double progress;
+  final Color accent;
+
+  const _FinishPulsePainter({
+    required this.progress,
+    required this.accent,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0) return;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = accent.withValues(alpha: 0.08 + progress * 0.18);
+    for (var i = 0; i < 3; i++) {
+      final inset = 6.0 + i * 8 + progress * 10;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            inset,
+            inset / 2,
+            size.width - inset * 2,
+            size.height - inset,
+          ),
+          const Radius.circular(999),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FinishPulsePainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.accent != accent;
+  }
+}
+
+class _SmallActionChip extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback onPressed;
+  final bool subdued;
+
+  const _SmallActionChip({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.subdued = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: icon == null ? null : Icon(icon, size: 18),
+      label: Text(label),
+      onPressed: onPressed,
+      backgroundColor: Colors.white.withValues(alpha: subdued ? 0.055 : 0.10),
+      labelStyle: TextStyle(
+        color: Colors.white.withValues(alpha: subdued ? 0.58 : 1.0),
+        fontWeight: FontWeight.w900,
+      ),
+      side: BorderSide(
+        color: Colors.white.withValues(alpha: subdued ? 0.06 : 0.10),
+      ),
+    );
   }
 }
 
@@ -533,10 +1313,12 @@ class _AmbientTheme {
 class _AmbientSelector extends StatelessWidget {
   final AmbientSound value;
   final ValueChanged<AmbientSound> onChanged;
+  final bool subdued;
 
   const _AmbientSelector({
     required this.value,
     required this.onChanged,
+    this.subdued = false,
   });
 
   @override
@@ -554,6 +1336,7 @@ class _AmbientSelector extends StatelessWidget {
           _AmbientChoice(
             sound: sound,
             selected: value == sound,
+            subdued: subdued,
             onTap: () => onChanged(sound),
           ),
       ],
@@ -564,11 +1347,13 @@ class _AmbientSelector extends StatelessWidget {
 class _AmbientChoice extends StatelessWidget {
   final AmbientSound sound;
   final bool selected;
+  final bool subdued;
   final VoidCallback onTap;
 
   const _AmbientChoice({
     required this.sound,
     required this.selected,
+    required this.subdued,
     required this.onTap,
   });
 
@@ -577,8 +1362,8 @@ class _AmbientChoice extends StatelessWidget {
     final theme = _AmbientTheme.forSound(sound);
     return Material(
       color: selected
-          ? theme.accent.withValues(alpha: 0.20)
-          : Colors.white.withValues(alpha: 0.06),
+          ? theme.accent.withValues(alpha: subdued ? 0.12 : 0.20)
+          : Colors.white.withValues(alpha: subdued ? 0.035 : 0.06),
       borderRadius: BorderRadius.circular(999),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -591,18 +1376,30 @@ class _AmbientChoice extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? theme.accent.withValues(alpha: 0.62)
-                  : Colors.white.withValues(alpha: 0.10),
+                  : Colors.white.withValues(alpha: subdued ? 0.055 : 0.10),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(_icon(sound), size: 18, color: theme.accent),
+              Icon(
+                _icon(sound),
+                size: 18,
+                color: theme.accent.withValues(alpha: subdued ? 0.74 : 1),
+              ),
               const SizedBox(width: 7),
               Text(
                 _label(sound),
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: selected ? 0.96 : 0.72),
+                  color: Colors.white.withValues(
+                    alpha: subdued
+                        ? selected
+                            ? 0.72
+                            : 0.48
+                        : selected
+                            ? 0.96
+                            : 0.72,
+                  ),
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -634,11 +1431,13 @@ class _AmbientBackdropPainter extends CustomPainter {
   final AmbientSound sound;
   final double phase;
   final _AmbientTheme theme;
+  final bool active;
 
   const _AmbientBackdropPainter({
     required this.sound,
     required this.phase,
     required this.theme,
+    required this.active,
   });
 
   @override
@@ -671,11 +1470,14 @@ class _AmbientBackdropPainter extends CustomPainter {
         size.width * (0.28 + 0.46 * ((ring * 37) % 100) / 100),
         size.height * (0.18 + 0.62 * ((ring * 53) % 100) / 100),
       );
-      paint.color = theme.accent.withValues(alpha: 0.035 + 0.04 * (1 - t));
+      paint.color = theme.accent.withValues(
+        alpha: (active ? 0.055 : 0.035) + (active ? 0.065 : 0.04) * (1 - t),
+      );
       canvas.drawCircle(center, radius, paint);
     }
-    final dotPaint = Paint()..color = theme.secondary.withValues(alpha: 0.08);
-    for (var i = 0; i < 58; i++) {
+    final dotPaint = Paint()
+      ..color = theme.secondary.withValues(alpha: active ? 0.13 : 0.08);
+    for (var i = 0; i < (active ? 82 : 58); i++) {
       final seed = i * 17.13;
       final x = (math.sin(seed + phase * math.pi * 2) * 0.5 + 0.5) * size.width;
       final y = (math.cos(seed * 0.7 + phase * math.pi * 2) * 0.5 + 0.5) *
@@ -686,10 +1488,10 @@ class _AmbientBackdropPainter extends CustomPainter {
 
   void _paintRain(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = theme.accent.withValues(alpha: 0.16)
-      ..strokeWidth = 1.2
+      ..color = theme.accent.withValues(alpha: active ? 0.24 : 0.16)
+      ..strokeWidth = active ? 1.6 : 1.2
       ..strokeCap = StrokeCap.round;
-    for (var i = 0; i < 90; i++) {
+    for (var i = 0; i < (active ? 128 : 90); i++) {
       final x = ((i * 31.0) % size.width) + math.sin(i) * 8;
       final travel = (phase * size.height * 1.4 + i * 23) % (size.height + 80);
       final start = Offset(x, travel - 80);
@@ -718,7 +1520,7 @@ class _AmbientBackdropPainter extends CustomPainter {
         }
       }
       paint.color = Color.lerp(theme.accent, theme.secondary, line / 7)!
-          .withValues(alpha: 0.06 + line * 0.012);
+          .withValues(alpha: (active ? 0.10 : 0.06) + line * 0.014);
       canvas.drawPath(path, paint);
     }
   }
@@ -727,26 +1529,35 @@ class _AmbientBackdropPainter extends CustomPainter {
   bool shouldRepaint(covariant _AmbientBackdropPainter oldDelegate) {
     return oldDelegate.sound != sound ||
         oldDelegate.phase != phase ||
-        oldDelegate.theme != theme;
+        oldDelegate.theme != theme ||
+        oldDelegate.active != active;
   }
 }
 
 class _AnalogFocusPainter extends CustomPainter {
   final double progress;
   final Color accent;
+  final Color secondary;
 
   const _AnalogFocusPainter({
     required this.progress,
     required this.accent,
+    required this.secondary,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    final radius = size.shortestSide / 2 - 18;
+    final radius = size.shortestSide / 2 - 22;
+    final trackPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..color = Colors.white.withValues(alpha: 0.08);
+    canvas.drawCircle(center, radius, trackPaint);
+
     final tickPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.16)
-      ..strokeWidth = 1.4
+      ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < 60; i++) {
@@ -764,21 +1575,60 @@ class _AnalogFocusPainter extends CustomPainter {
       canvas.drawLine(inner, outer, tickPaint);
     }
 
-    final handAngle = -math.pi / 2 + progress.clamp(0, 1) * math.pi * 2;
-    final handEnd = Offset(
-      center.dx + math.cos(handAngle) * (radius - 28),
-      center.dy + math.sin(handAngle) * (radius - 28),
-    );
-    final handPaint = Paint()
-      ..color = accent.withValues(alpha: 0.92)
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(center, handEnd, handPaint);
-    canvas.drawCircle(center, 6, Paint()..color = Colors.white);
+    final clamped = progress.clamp(0.0, 1.0);
+    final warningColor = Color.lerp(accent, const Color(0xFFFF7A6C), clamped)!;
+    final arcRect = Rect.fromCircle(center: center, radius: radius);
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 18
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12)
+      ..shader = SweepGradient(
+        startAngle: -math.pi / 2,
+        endAngle: math.pi * 1.5,
+        colors: [
+          secondary.withValues(alpha: 0.36),
+          accent.withValues(alpha: 0.46),
+          warningColor.withValues(alpha: 0.50),
+        ],
+        stops: const [0.0, 0.62, 1.0],
+      ).createShader(arcRect);
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        startAngle: -math.pi / 2,
+        endAngle: math.pi * 1.5,
+        colors: [
+          secondary.withValues(alpha: 0.92),
+          accent,
+          warningColor,
+        ],
+        stops: const [0.0, 0.62, 1.0],
+      ).createShader(arcRect);
+    if (clamped > 0) {
+      canvas.drawArc(
+        arcRect,
+        -math.pi / 2,
+        clamped * math.pi * 2,
+        false,
+        glowPaint,
+      );
+      canvas.drawArc(
+        arcRect,
+        -math.pi / 2,
+        clamped * math.pi * 2,
+        false,
+        arcPaint,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(covariant _AnalogFocusPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.accent != accent;
+    return oldDelegate.progress != progress ||
+        oldDelegate.accent != accent ||
+        oldDelegate.secondary != secondary;
   }
 }

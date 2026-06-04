@@ -172,6 +172,7 @@ class DailyRhythmNotificationService {
 
   Future<void> scheduleFocusFinished({
     required DateTime when,
+    required String activityId,
     required String activityName,
   }) {
     return plugin.zonedSchedule(
@@ -183,7 +184,7 @@ class DailyRhythmNotificationService {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
-      payload: 'daily_rhythm:focus_finished',
+      payload: 'daily_rhythm:focus_finished:$activityId',
     );
   }
 

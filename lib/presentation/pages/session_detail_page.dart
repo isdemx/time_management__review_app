@@ -7,8 +7,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_models.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
-import 'package:time_tracker/application/paywall/paywall_models.dart';
-import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/data/utils/color_utils.dart';
 import 'package:time_tracker/domain/entities/day_session.dart';
 import 'package:time_tracker/domain/entities/time_segment.dart';
@@ -21,7 +19,6 @@ import 'package:time_tracker/domain/repositories/trackable_repository.dart';
 import 'package:time_tracker/presentation/blocs/session_detail/session_detail_bloc.dart';
 import 'package:time_tracker/presentation/pages/daily_rhythm/evening_reflection_page.dart';
 import 'package:time_tracker/presentation/pages/daily_rhythm/focus_mode_page.dart';
-import 'package:time_tracker/presentation/paywall/paywall_page.dart';
 import 'package:time_tracker/presentation/theme/chronika_theme.dart';
 import 'package:time_tracker/presentation/utils/time_format_util.dart';
 import 'package:time_tracker/presentation/widgets/trackable_button.dart';
@@ -148,7 +145,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
                 if (!isFinished)
                   IconButton(
                     onPressed: () => _openEveningReflection(context, state),
-                    icon: const Icon(Icons.nightlight_round),
+                    icon: const Icon(Icons.check_circle_outline_rounded),
                     tooltip: 'Close Day',
                   ),
                 IconButton(
@@ -725,26 +722,29 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
     Trackable trackable,
   ) async {
     _closeTrackableSlider();
-    final paywallService = context.read<PaywallService>();
-    final canUseFocus =
-        await paywallService.canUse(PremiumFeature.focusSessions);
-    if (!context.mounted) {
-      return;
-    }
-    if (!canUseFocus) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => const PaywallPage(source: 'focus_mode'),
-        ),
-      );
-      return;
-    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => FocusModePage(
           daySessionId: null,
           activityId: trackable.id,
           activityName: trackable.name,
+          modes: state.modesByTrackable[trackable.id] ?? const [],
+          activeModeId: state.activeModeId,
+          onModeSelected: (modeId) {
+            context.read<SessionDetailBloc>().add(
+                  SessionDetailTrackableSelected(
+                    trackableId: trackable.id,
+                    modeId: modeId,
+                  ),
+                );
+          },
+          onSwitchActivityRequested: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Choose another activity to continue.'),
+              ),
+            );
+          },
         ),
       ),
     );
