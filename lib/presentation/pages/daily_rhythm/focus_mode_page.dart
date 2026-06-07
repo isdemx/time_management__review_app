@@ -10,6 +10,8 @@ import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
+import 'package:time_tracker/core/analytics/analytics_events.dart';
+import 'package:time_tracker/core/analytics/analytics_service.dart';
 import 'package:time_tracker/domain/entities/focus_session.dart';
 import 'package:time_tracker/domain/entities/trackable_mode.dart';
 import 'package:time_tracker/domain/repositories/daily_rhythm_repository.dart';
@@ -50,6 +52,7 @@ class _FocusModePageState extends State<FocusModePage>
 
   late final DailyRhythmRepository _repository;
   late final DailyRhythmNotificationService _notificationService;
+  late final AnalyticsService _analyticsService;
   late final IOSScreenTimeService _screenTimeService;
   late final IOSFocusAppsSettingsService _focusAppsSettingsService;
   late final AnimationController _ambientController;
@@ -78,6 +81,7 @@ class _FocusModePageState extends State<FocusModePage>
     super.initState();
     _repository = context.read<DailyRhythmRepository>();
     _notificationService = context.read<DailyRhythmNotificationService>();
+    _analyticsService = context.read<AnalyticsService>();
     _screenTimeService = context.read<IOSScreenTimeService>();
     _focusAppsSettingsService = context.read<IOSFocusAppsSettingsService>();
     _ambientController = AnimationController(
@@ -201,6 +205,10 @@ class _FocusModePageState extends State<FocusModePage>
               : FocusSessionMode.custom,
     );
     await _repository.saveFocusSession(session);
+    await _analyticsService.track(
+      AnalyticsEvent.focusStarted,
+      properties: {AnalyticsProperties.activityName: widget.activityName},
+    );
     if (_focusAppsBlockingEnabled) {
       final settings = await _focusAppsSettingsService.load();
       await _screenTimeService.configure(settings);
@@ -235,6 +243,7 @@ class _FocusModePageState extends State<FocusModePage>
               : FocusSessionStatus.cancelled,
         ),
       );
+      await _trackFocusFinished(completed: completed);
     }
     if (_focusAppsBlockingEnabled) {
       await _screenTimeService.stopFocusBlocking();
@@ -291,6 +300,7 @@ class _FocusModePageState extends State<FocusModePage>
           status: FocusSessionStatus.completed,
         ),
       );
+      await _trackFocusFinished(completed: true);
     }
     if (_focusAppsBlockingEnabled) {
       await _screenTimeService.stopFocusBlocking();
@@ -307,8 +317,20 @@ class _FocusModePageState extends State<FocusModePage>
     });
   }
 
+  Future<void> _trackFocusFinished({required bool completed}) {
+    final trackedSeconds =
+        (_durationMinutes * 60) - _currentRemaining().inSeconds;
+    return _analyticsService.track(
+      completed ? AnalyticsEvent.focusCompleted : AnalyticsEvent.focusCancelled,
+      properties: {
+        AnalyticsProperties.durationSeconds: math.max(trackedSeconds, 0),
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final standalone = widget.activityId.trim().isEmpty;
     final hasSession = _session != null;
     final progress = _expired
         ? 1.0
@@ -380,27 +402,30 @@ class _FocusModePageState extends State<FocusModePage>
                                   letterSpacing: 2.5,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    widget.activityName,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge
-                                        ?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    color: Colors.white.withValues(alpha: 0.72),
-                                  ),
-                                ],
-                              ),
+                              if (!standalone) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      widget.activityName,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.72),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                           const Spacer(),
@@ -416,14 +441,16 @@ class _FocusModePageState extends State<FocusModePage>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      _ModeStrip(
-                        modes: _visibleModes(),
-                        activeModeId: _activeModeId,
-                        accent: ambientTheme.accent,
-                        onSelected: _selectMode,
-                      ),
-                      const SizedBox(height: 18),
+                      SizedBox(height: standalone ? 28 : 16),
+                      if (!standalone) ...[
+                        _ModeStrip(
+                          modes: _visibleModes(),
+                          activeModeId: _activeModeId,
+                          accent: ambientTheme.accent,
+                          onSelected: _selectMode,
+                        ),
+                        const SizedBox(height: 18),
+                      ],
                       Expanded(
                         child: Center(
                           child: LayoutBuilder(

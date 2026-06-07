@@ -1,4 +1,13 @@
 PODS:
+  - amplitude_flutter (4.4.0):
+    - AmplitudeSwift (~> 1.17.5)
+    - Flutter
+    - FlutterMacOS
+  - AmplitudeCore (1.4.6)
+  - AmplitudeSwift (1.17.5):
+    - AmplitudeCore (< 2.0.0, >= 1.4.1)
+    - AnalyticsConnector (~> 1.3.0)
+  - AnalyticsConnector (1.3.1)
   - app_group_directory (2.0.0):
     - Flutter
   - app_tracking_transparency (0.0.1):
@@ -7,6 +16,14 @@ PODS:
     - ApphudSDK (= 3.6.2)
     - Flutter
   - ApphudSDK (3.6.2)
+  - appsflyer_sdk (6.18.0):
+    - appsflyer_sdk/Core (= 6.18.0)
+  - appsflyer_sdk/Core (6.18.0):
+    - AppsFlyerFramework (= 6.18.0)
+    - Flutter
+  - AppsFlyerFramework (6.18.0):
+    - AppsFlyerFramework/Main (= 6.18.0)
+  - AppsFlyerFramework/Main (6.18.0)
   - audioplayers_darwin (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -35,9 +52,11 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
+  - amplitude_flutter (from `.symlinks/plugins/amplitude_flutter/darwin`)
   - app_group_directory (from `.symlinks/plugins/app_group_directory/ios`)
   - app_tracking_transparency (from `.symlinks/plugins/app_tracking_transparency/ios`)
   - apphud (from `.symlinks/plugins/apphud/ios`)
+  - appsflyer_sdk (from `.symlinks/plugins/appsflyer_sdk/ios`)
   - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/darwin`)
   - Flutter (from `Flutter`)
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
@@ -53,15 +72,23 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - AmplitudeCore
+    - AmplitudeSwift
+    - AnalyticsConnector
     - ApphudSDK
+    - AppsFlyerFramework
 
 EXTERNAL SOURCES:
+  amplitude_flutter:
+    :path: ".symlinks/plugins/amplitude_flutter/darwin"
   app_group_directory:
     :path: ".symlinks/plugins/app_group_directory/ios"
   app_tracking_transparency:
     :path: ".symlinks/plugins/app_tracking_transparency/ios"
   apphud:
     :path: ".symlinks/plugins/apphud/ios"
+  appsflyer_sdk:
+    :path: ".symlinks/plugins/appsflyer_sdk/ios"
   audioplayers_darwin:
     :path: ".symlinks/plugins/audioplayers_darwin/darwin"
   Flutter:
@@ -88,10 +115,16 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/wakelock_plus/ios"
 
 SPEC CHECKSUMS:
+  amplitude_flutter: 71c2c5bdd5fbc4afecb0aaf29020af7321582928
+  AmplitudeCore: e384984131ec515b92396801ab65b53e8fd73fa7
+  AmplitudeSwift: 89f675b8b81a2710ef244324d2083641ffb702b6
+  AnalyticsConnector: 3def11199b4ddcad7202c778bde982ec5da0ebb3
   app_group_directory: 6bb61057e067ff2e96cadc2635c48000783e67ac
   app_tracking_transparency: e169b653478da7bb15a6c61209015378ca73e375
   apphud: 84a183c9b73b2bac7204a09d141036f38743859f
   ApphudSDK: 787b3f4f41427a07f4f8d02590470f31f567cfdf
+  appsflyer_sdk: 24f760d664b94dcac05233261369189104ffd4fe
+  AppsFlyerFramework: c1e1e4cd3b98ffdca2fe32b17ae93909e409b6ab
   audioplayers_darwin: f15e209a3e856d1a7edcf98dc029f484fead2242
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_local_notifications: 4cde75091f6327eb8517fa068a0a5950212d2086

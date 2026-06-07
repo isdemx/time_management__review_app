@@ -13,6 +13,7 @@ class PaywallProduct {
   final String title;
   final String price;
   final bool recommended;
+  final bool hasTrial;
   final Object rawProduct;
 
   const PaywallProduct({
@@ -20,6 +21,7 @@ class PaywallProduct {
     required this.title,
     required this.price,
     required this.recommended,
+    this.hasTrial = false,
     required this.rawProduct,
   });
 }

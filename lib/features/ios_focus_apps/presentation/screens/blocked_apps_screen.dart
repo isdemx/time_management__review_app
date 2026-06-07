@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:time_tracker/core/analytics/analytics_events.dart';
+import 'package:time_tracker/core/analytics/analytics_service.dart';
 import 'package:time_tracker/features/ios_focus_apps/domain/ios_focus_apps_models.dart';
 import 'package:time_tracker/features/ios_focus_apps/services/ios_focus_apps_settings_service.dart';
 import 'package:time_tracker/features/ios_focus_apps/services/ios_screen_time_service.dart';
@@ -17,6 +19,7 @@ class BlockedAppsScreen extends StatefulWidget {
 class _BlockedAppsScreenState extends State<BlockedAppsScreen> {
   late final IOSScreenTimeService _screenTimeService;
   late final IOSFocusAppsSettingsService _settingsService;
+  late final AnalyticsService _analyticsService;
   IOSFocusAppsBlockingState _state = IOSFocusAppsBlockingState.inactive;
   IOSFocusAppsSettings? _settings;
   Timer? _ticker;
@@ -27,6 +30,7 @@ class _BlockedAppsScreenState extends State<BlockedAppsScreen> {
     super.initState();
     _screenTimeService = context.read<IOSScreenTimeService>();
     _settingsService = context.read<IOSFocusAppsSettingsService>();
+    _analyticsService = context.read<AnalyticsService>();
     _load();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       _refreshCountdown();
@@ -66,6 +70,14 @@ class _BlockedAppsScreenState extends State<BlockedAppsScreen> {
       return;
     }
     final settings = _settings ?? IOSFocusAppsSettings.defaults(DateTime.now());
+    await _analyticsService.track(
+      AnalyticsEvent.temporaryUnlockRequested,
+      properties: {
+        AnalyticsProperties.appName:
+            _state.lastBlockedAppName ?? 'selected_apps',
+      },
+    );
+    if (!mounted) return;
     final breathed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => _BreathingUnlockScreen(
@@ -84,6 +96,14 @@ class _BlockedAppsScreenState extends State<BlockedAppsScreen> {
     );
     if (minutes == null) return;
     await _screenTimeService.temporaryUnlock(Duration(minutes: minutes));
+    await _analyticsService.track(
+      AnalyticsEvent.temporaryUnlockCompleted,
+      properties: {
+        AnalyticsProperties.appName:
+            _state.lastBlockedAppName ?? 'selected_apps',
+        AnalyticsProperties.unlockMinutes: minutes,
+      },
+    );
     await _load();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -95,15 +115,15 @@ class _BlockedAppsScreenState extends State<BlockedAppsScreen> {
   Widget build(BuildContext context) {
     if (!Platform.isIOS) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Blocked apps')),
-        body: const Center(child: Text('Blocked apps are iOS-only.')),
+        appBar: AppBar(title: const Text('App Control')),
+        body: const Center(child: Text('App Control is iOS-only.')),
       );
     }
     final settings = _settings;
     final hasActiveUnlock = _hasActiveUnlock(_state);
     final canUnlock = _state.areAppsCurrentlyBlocked && !hasActiveUnlock;
     return Scaffold(
-      appBar: AppBar(title: const Text('Blocked apps')),
+      appBar: AppBar(title: const Text('App Control')),
       body: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: RadialGradient(

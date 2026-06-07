@@ -1,5 +1,6 @@
 // ignore_for_file: unused_element, unused_element_parameter
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -14,8 +15,13 @@ import 'package:time_tracker/domain/entities/trackable_mode.dart';
 import 'package:time_tracker/domain/repositories/session_v2_repository.dart';
 import 'package:time_tracker/domain/repositories/timeline_repository.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
+import 'package:time_tracker/features/ios_focus_apps/domain/ios_focus_apps_models.dart';
+import 'package:time_tracker/features/ios_focus_apps/presentation/screens/focus_apps_settings_screen.dart';
+import 'package:time_tracker/features/ios_focus_apps/services/ios_focus_apps_settings_service.dart';
+import 'package:time_tracker/features/ios_focus_apps/services/ios_screen_time_service.dart';
 import 'package:time_tracker/presentation/blocs/session_detail/session_detail_bloc.dart';
 import 'package:time_tracker/presentation/blocs/sessions/sessions_bloc.dart';
+import 'package:time_tracker/presentation/pages/daily_rhythm/focus_mode_page.dart';
 import 'package:time_tracker/presentation/pages/daily_rhythm/morning_start_page.dart';
 import 'package:time_tracker/presentation/pages/new_session_draft_page.dart';
 import 'package:time_tracker/presentation/pages/session_detail_page.dart';
@@ -92,18 +98,6 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
             if (state is SessionsLoaded) {
               _ensureSessionSharesLoaded(state.sessions);
 
-              if (state.sessions.isEmpty && state.templates.isEmpty) {
-                return _SessionsBackdrop(
-                  child: Center(
-                    child: FilledButton.icon(
-                      onPressed: () => _openMorningStart(context),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Start Day'),
-                    ),
-                  ),
-                );
-              }
-
               final sessions = _sortedSessions(state.sessions);
               final activeSessions = sessions
                   .where(
@@ -117,22 +111,16 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
                 child: CustomScrollView(
                   physics: const BouncingScrollPhysics(),
                   slivers: [
-                    const SliverToBoxAdapter(
-                      child: SafeArea(
-                        bottom: false,
-                        child: _SessionsSectionTitle(
-                          title: 'Current Sessions',
-                          topPadding: 18,
+                    if (activeSessions.isNotEmpty) ...[
+                      const SliverToBoxAdapter(
+                        child: SafeArea(
+                          bottom: false,
+                          child: _SessionsSectionTitle(
+                            title: 'Current Sessions',
+                            topPadding: 18,
+                          ),
                         ),
                       ),
-                    ),
-                    if (activeSessions.isEmpty)
-                      SliverToBoxAdapter(
-                        child: _EmptyNowCard(
-                          onStart: () => _openMorningStart(context),
-                        ),
-                      )
-                    else
                       SliverList.builder(
                         itemCount: activeSessions.length,
                         itemBuilder: (context, index) {
@@ -146,18 +134,34 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
                           );
                         },
                       ),
+                    ] else
+                      const SliverToBoxAdapter(
+                        child: SafeArea(
+                          bottom: false,
+                          child: SizedBox(height: 18),
+                        ),
+                      ),
                     SliverToBoxAdapter(
+                      child: _AppControlStatusCard(
+                        onOpenSettings: () => _openAppControl(context),
+                      ),
+                    ),
+                    if (activeSessions.isEmpty)
+                      SliverToBoxAdapter(
+                        child: _StandaloneFocusCard(
+                          onTap: () => _openStandaloneFocus(context),
+                        ),
+                      ),
+                    const SliverToBoxAdapter(
                       child: _SessionsSectionTitle(
-                        title: 'Quick start',
-                        subtitle: state.templates.isEmpty
-                            ? 'Create a session'
-                            : 'Start a template',
-                        topPadding: 34,
+                        title: 'Session Templates',
+                        subtitle: 'Start fresh or launch a saved rhythm',
+                        topPadding: 26,
                       ),
                     ),
                     SliverToBoxAdapter(
                       child: SizedBox(
-                        height: 190,
+                        height: 174,
                         child: ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           scrollDirection: Axis.horizontal,
@@ -166,12 +170,12 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
                           separatorBuilder: (_, __) =>
                               const SizedBox(width: 10),
                           itemBuilder: (context, index) {
-                            if (index == state.templates.length) {
+                            if (index == 0) {
                               return const _QuickStartNewSessionCard();
                             }
                             return _QuickStartTemplateCard(
-                              template: state.templates[index],
-                              index: index,
+                              template: state.templates[index - 1],
+                              index: index - 1,
                             );
                           },
                         ),
@@ -383,6 +387,26 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
     }
   }
 
+  Future<void> _openAppControl(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const FocusAppsSettingsScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openStandaloneFocus(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const FocusModePage(
+          daySessionId: null,
+          activityId: '',
+          activityName: 'Focus Mode',
+        ),
+      ),
+    );
+  }
+
   int _statusRank(SessionStatus status) {
     switch (status) {
       case SessionStatus.active:
@@ -574,6 +598,400 @@ class _EmptyStartButton extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AppControlStatusCard extends StatefulWidget {
+  final Future<void> Function() onOpenSettings;
+
+  const _AppControlStatusCard({required this.onOpenSettings});
+
+  @override
+  State<_AppControlStatusCard> createState() => _AppControlStatusCardState();
+}
+
+class _AppControlStatusCardState extends State<_AppControlStatusCard> {
+  Timer? _timer;
+  IOSFocusAppsSettings? _settings;
+  IOSFocusAppsBlockingState _blockingState = IOSFocusAppsBlockingState.inactive;
+  bool _authorized = false;
+  bool _hasSelection = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+      _refreshBlockingState();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final settingsService = context.read<IOSFocusAppsSettingsService>();
+      final screenTime = context.read<IOSScreenTimeService>();
+      final settings = await settingsService.load();
+      final authorized = await screenTime.isAuthorized();
+      final hasSelection = await screenTime.hasSelection();
+      final blockingState = await screenTime.getBlockingState();
+      if (!mounted) return;
+      setState(() {
+        _settings = settings;
+        _authorized = authorized;
+        _hasSelection = hasSelection;
+        _blockingState = blockingState;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshBlockingState() async {
+    if (_settings?.isEnabled != true) return;
+    try {
+      final blockingState =
+          await context.read<IOSScreenTimeService>().getBlockingState();
+      if (!mounted) return;
+      setState(() => _blockingState = blockingState);
+    } catch (_) {
+      // Main screen status should never interrupt normal app usage.
+    }
+  }
+
+  Future<void> _openSettings() async {
+    await widget.onOpenSettings();
+    if (!mounted) return;
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFFF5B84B);
+    final enabled =
+        _settings?.isEnabled == true && _authorized && _hasSelection;
+    final now = DateTime.now();
+    final unlockEndsAt = _blockingState.temporaryUnlockEndsAt;
+    final unlockRemaining =
+        unlockEndsAt == null ? Duration.zero : unlockEndsAt.difference(now);
+    final hasTemporaryUnlock = enabled && unlockRemaining > Duration.zero;
+    final dailyLimitReached = enabled &&
+        _blockingState.areAppsCurrentlyBlocked &&
+        _blockingState.blockingReason == BlockingReason.dailyLimitReached;
+
+    late final String title;
+    late final String subtitle;
+    late final String value;
+    late final IconData icon;
+    late final String actionLabel;
+    late final bool primaryAction;
+
+    if (_loading) {
+      title = 'App Control';
+      subtitle = 'Checking Screen Time status';
+      value = '...';
+      icon = Icons.hourglass_empty_rounded;
+      actionLabel = 'Settings';
+      primaryAction = false;
+    } else if (!enabled) {
+      title = 'App Control';
+      subtitle = 'Track app limits, notifications and focus blocking.';
+      value = 'Off';
+      icon = Icons.shield_outlined;
+      actionLabel = 'Turn on';
+      primaryAction = true;
+    } else if (hasTemporaryUnlock) {
+      title = 'Extra time active';
+      subtitle = 'Selected apps are available for a short break.';
+      value = _formatCompactDuration(unlockRemaining);
+      icon = Icons.lock_open_rounded;
+      actionLabel = 'Settings';
+      primaryAction = false;
+    } else if (dailyLimitReached) {
+      title = 'Daily limit reached';
+      subtitle = 'Selected apps are blocked until tomorrow.';
+      value = 'Time is up';
+      icon = Icons.block_rounded;
+      actionLabel = 'Settings';
+      primaryAction = false;
+    } else {
+      final limit = _settings?.dailyLimitMinutes;
+      title = 'App Control active';
+      subtitle = _modeSubtitle(_settings?.dailyMode);
+      value = limit == null ? 'No limit' : '$limit min limit';
+      icon = Icons.shield_rounded;
+      actionLabel = 'Settings';
+      primaryAction = false;
+    }
+
+    final resetRemaining = _nextMidnight(now).difference(now);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _openSettings,
+          splashColor: accent.withValues(alpha: 0.10),
+          highlightColor: accent.withValues(alpha: 0.06),
+          child: _GlassPanel(
+            borderColor: accent.withValues(alpha: enabled ? 0.30 : 0.18),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 15, 16, 15),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accent.withValues(alpha: enabled ? 0.22 : 0.10),
+                      border: Border.all(
+                        color: accent.withValues(alpha: enabled ? 0.44 : 0.18),
+                      ),
+                    ),
+                    child: Icon(icon, color: accent, size: 23),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.55),
+                                    height: 1.22,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                        if (enabled && !hasTemporaryUnlock) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Resets in ${_formatCompactDuration(resetRemaining)}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.34),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        value,
+                        textAlign: TextAlign.right,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: enabled ? accent : Colors.white70,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                      ),
+                      const SizedBox(height: 9),
+                      _TinyPillButton(
+                        label: actionLabel,
+                        primary: primaryAction,
+                        accent: accent,
+                        onTap: _openSettings,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _modeSubtitle(AppControlMode? mode) {
+    return switch (mode) {
+      AppControlMode.blockAfterLimit => 'Apps block when the daily limit ends.',
+      AppControlMode.notifyOnLimit => 'Notifications are on for your limit.',
+      AppControlMode.trackOnly => 'Tracking is on without blocking.',
+      null => 'Screen Time rules are ready.',
+    };
+  }
+
+  DateTime _nextMidnight(DateTime now) {
+    return DateTime(now.year, now.month, now.day + 1);
+  }
+
+  String _formatCompactDuration(Duration duration) {
+    final safe = duration.isNegative ? Duration.zero : duration;
+    final hours = safe.inHours;
+    final minutes = safe.inMinutes.remainder(60);
+    final seconds = safe.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+class _TinyPillButton extends StatelessWidget {
+  final String label;
+  final bool primary;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _TinyPillButton({
+    required this.label,
+    required this.primary,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: primary
+              ? accent.withValues(alpha: 0.95)
+              : Colors.white.withValues(alpha: 0.055),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: primary
+                ? accent.withValues(alpha: 0.85)
+                : Colors.white.withValues(alpha: 0.11),
+          ),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: primary ? const Color(0xFF111018) : Colors.white70,
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StandaloneFocusCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _StandaloneFocusCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFFA579FF);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          splashColor: accent.withValues(alpha: 0.10),
+          highlightColor: accent.withValues(alpha: 0.06),
+          child: _GlassPanel(
+            borderColor: accent.withValues(alpha: 0.26),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 15, 16, 15),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF8B35FF), Color(0xFFFF6AA2)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.24),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                          spreadRadius: -10,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.timer_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Focus Mode',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          'Start a quiet timer without creating a session.',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.55),
+                                    height: 1.22,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Colors.white.withValues(alpha: 0.34),
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -960,7 +1378,7 @@ class _QuickStartTemplateCard extends StatelessWidget {
       builder: (context, snapshot) {
         final items = snapshot.data ?? const <_TemplateTrackableViewData>[];
         return SizedBox(
-          width: 210,
+          width: 188,
           child: Material(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(18),
@@ -985,7 +1403,7 @@ class _QuickStartTemplateCard extends StatelessWidget {
                   ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                  padding: const EdgeInsets.fromLTRB(14, 15, 14, 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -993,13 +1411,14 @@ class _QuickStartTemplateCard extends StatelessWidget {
                         template.name,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.92),
-                              fontWeight: FontWeight.w900,
-                              height: 1.08,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.92),
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.08,
+                                ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       Text(
                         items.isEmpty
                             ? 'template'
@@ -1017,7 +1436,7 @@ class _QuickStartTemplateCard extends StatelessWidget {
                       ),
                       const Spacer(),
                       Container(
-                        height: 40,
+                        height: 34,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: accent.withValues(alpha: 0.18),
@@ -1155,7 +1574,7 @@ class _QuickStartNewSessionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     const accent = Color(0xFF3B82F6);
     return SizedBox(
-      width: 210,
+      width: 188,
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(18),
@@ -1179,7 +1598,7 @@ class _QuickStartNewSessionCard extends StatelessWidget {
               ],
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+              padding: const EdgeInsets.fromLTRB(14, 15, 14, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1187,7 +1606,7 @@ class _QuickStartNewSessionCard extends StatelessWidget {
                     'New session',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: Colors.white.withValues(alpha: 0.92),
                           fontWeight: FontWeight.w900,
                           height: 1.08,
@@ -1196,7 +1615,7 @@ class _QuickStartNewSessionCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     'Start from an empty session and add activities as you go.',
-                    maxLines: 4,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                           color: Colors.white.withValues(alpha: 0.52),
@@ -1206,7 +1625,7 @@ class _QuickStartNewSessionCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Container(
-                    height: 40,
+                    height: 34,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.18),

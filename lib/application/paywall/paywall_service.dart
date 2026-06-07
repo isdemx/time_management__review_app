@@ -3,18 +3,40 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
 import 'package:time_tracker/application/paywall/apphud_service.dart';
 import 'package:time_tracker/application/paywall/paywall_models.dart';
+import 'package:time_tracker/core/analytics/analytics_events.dart';
+import 'package:time_tracker/core/analytics/analytics_service.dart';
 
 class PaywallService {
   final ApphudService apphudService;
+  final AnalyticsService analyticsService;
 
-  PaywallService({required this.apphudService});
+  PaywallService({
+    required this.apphudService,
+    required this.analyticsService,
+  });
 
   Future<List<PaywallProduct>> loadProducts() {
     return apphudService.loadProducts();
   }
 
+  Future<List<Object>> fetchPaywalls() {
+    return apphudService.fetchPaywalls();
+  }
+
+  Future<Object?> getMainPaywall() {
+    return apphudService.getMainPaywall();
+  }
+
   Future<bool> purchase(PaywallProduct product) {
     return apphudService.purchase(product);
+  }
+
+  Future<bool> purchaseWeekly() {
+    return apphudService.purchaseWeekly();
+  }
+
+  Future<bool> purchaseYearly() {
+    return apphudService.purchaseYearly();
   }
 
   Future<bool> restorePurchases() {
@@ -23,6 +45,14 @@ class PaywallService {
 
   Future<bool> isPremiumActive() {
     return apphudService.isPremiumActive();
+  }
+
+  Future<bool> hasPremiumAccess() {
+    return apphudService.hasPremiumAccess();
+  }
+
+  Future<bool> syncPurchases() {
+    return apphudService.syncPurchases();
   }
 
   Future<bool> canUse(PremiumFeature feature) async {
@@ -39,11 +69,23 @@ class PaywallService {
   }
 
   Future<void> markPaywallShown() async {
+    await apphudService.markPaywallShown();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(OnboardingService.paywallShownKey, true);
   }
 
-  void trackEvent(String name, [Map<String, Object?> parameters = const {}]) {
-    // Hook analytics provider here.
+  Future<void> markPaywallClosed() {
+    return apphudService.markPaywallClosed();
+  }
+
+  Future<void> track(
+    AnalyticsEvent event, {
+    Map<String, dynamic>? properties,
+  }) {
+    return analyticsService.track(event, properties: properties);
+  }
+
+  Future<void> setUserProperties(Map<String, dynamic> properties) {
+    return analyticsService.setUserProperties(properties);
   }
 }

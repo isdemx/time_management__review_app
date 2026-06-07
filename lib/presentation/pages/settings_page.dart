@@ -10,6 +10,7 @@ import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_
 import 'package:time_tracker/features/ios_focus_apps/presentation/screens/focus_apps_settings_screen.dart';
 import 'package:time_tracker/features/social_app_tracking/presentation/screens/social_app_tracking_settings_screen.dart';
 import 'package:time_tracker/presentation/onboarding/onboarding_page.dart';
+import 'package:time_tracker/presentation/paywall/paywall_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -89,6 +90,20 @@ class _SettingsPageState extends State<SettingsPage> {
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0,
                   ),
+            ),
+            const SizedBox(height: 34),
+            const _SettingsSectionLabel('Premium'),
+            const SizedBox(height: 10),
+            _GlassSettingsPanel(
+              children: [
+                _AboutSettingTile(
+                  icon: Icons.workspace_premium_rounded,
+                  iconColor: const Color(0xFFF5B84B),
+                  title: 'Unlock Premium',
+                  subtitle: 'Focus, analytics and deeper app control',
+                  onTap: _openPaywall,
+                ),
+              ],
             ),
             const SizedBox(height: 34),
             const _SettingsSectionLabel('Session Visibility'),
@@ -232,15 +247,15 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 34),
             if (Platform.isIOS) ...[
-              const _SettingsSectionLabel('Focus Apps'),
+              const _SettingsSectionLabel('App Control'),
               const SizedBox(height: 10),
               _GlassSettingsPanel(
                 children: [
                   _AboutSettingTile(
                     icon: Icons.shield_rounded,
                     iconColor: const Color(0xFF66D9FF),
-                    title: 'Focus Apps',
-                    subtitle: 'Screen Time access, app limits and Focus Mode',
+                    title: 'App Control',
+                    subtitle: 'Screen Time, limits and app blocking',
                     onTap: _openFocusApps,
                   ),
                 ],
@@ -346,6 +361,14 @@ class _SettingsPageState extends State<SettingsPage> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const FocusAppsSettingsScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openPaywall() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const PaywallPage(source: 'settings'),
       ),
     );
   }

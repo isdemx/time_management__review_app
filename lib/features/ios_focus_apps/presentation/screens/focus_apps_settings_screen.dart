@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:time_tracker/core/analytics/analytics_events.dart';
+import 'package:time_tracker/core/analytics/analytics_service.dart';
 import 'package:time_tracker/features/ios_focus_apps/domain/ios_focus_apps_models.dart';
 import 'package:time_tracker/features/ios_focus_apps/presentation/screens/blocked_apps_screen.dart';
 import 'package:time_tracker/features/ios_focus_apps/services/ios_focus_apps_settings_service.dart';
@@ -18,6 +20,7 @@ class FocusAppsSettingsScreen extends StatefulWidget {
 class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
   late final IOSScreenTimeService _screenTimeService;
   late final IOSFocusAppsSettingsService _settingsService;
+  late final AnalyticsService _analyticsService;
   IOSFocusAppsSettings? _settings;
   bool _loading = true;
   String? _error;
@@ -27,6 +30,7 @@ class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
     super.initState();
     _screenTimeService = context.read<IOSScreenTimeService>();
     _settingsService = context.read<IOSFocusAppsSettingsService>();
+    _analyticsService = context.read<AnalyticsService>();
     _load();
   }
 
@@ -89,6 +93,7 @@ class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
     await _screenTimeService.configure(next);
     if (next.isEnabled) {
       await _screenTimeService.startDailyMonitoring();
+      await _trackSetupCompleted(next);
     }
     if (!mounted) return;
     setState(() => _settings = next);
@@ -105,7 +110,29 @@ class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
       await _screenTimeService.stopDailyMonitoring();
     } else {
       await _screenTimeService.startDailyMonitoring();
+      await _trackSetupCompleted(next);
     }
+    await _analyticsService.setUserProperties(
+      {
+        AnalyticsUserProperties.trackingEnabled: next.isEnabled,
+        AnalyticsUserProperties.focusEnabled: next.focusModeBlockingEnabled,
+      },
+    );
+  }
+
+  Future<void> _trackSetupCompleted(IOSFocusAppsSettings settings) {
+    return _analyticsService.track(
+      AnalyticsEvent.trackingSetupCompleted,
+      properties: {AnalyticsProperties.mode: _modeAnalyticsValue(settings)},
+    );
+  }
+
+  String _modeAnalyticsValue(IOSFocusAppsSettings settings) {
+    return switch (settings.dailyMode) {
+      AppControlMode.trackOnly => 'track_only',
+      AppControlMode.notifyOnLimit => 'notify',
+      AppControlMode.blockAfterLimit => 'block',
+    };
   }
 
   @override
@@ -113,14 +140,14 @@ class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
     final settings = _settings;
     if (!Platform.isIOS) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Focus Apps')),
+        appBar: AppBar(title: const Text('App Control')),
         body: const Center(
-          child: Text('Focus Apps uses Apple Screen Time and is iOS-only.'),
+          child: Text('App Control uses Apple Screen Time and is iOS-only.'),
         ),
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Focus Apps')),
+      appBar: AppBar(title: const Text('App Control')),
       body: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: RadialGradient(
@@ -139,7 +166,7 @@ class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Protect your focus time',
+                          'App Control',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 25,
@@ -148,7 +175,7 @@ class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Chronika can help protect Focus Mode and limit distracting apps during the day. Screen Time data stays protected by Apple and remains on your device.',
+                          'Track selected apps, get limit notifications and block distractions when you want stronger boundaries. Screen Time data stays protected by Apple and remains on your device.',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.62),
                             height: 1.35,
@@ -194,12 +221,12 @@ class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _SectionTitle('Daily App Control'),
+                        const _SectionTitle('Daily app rules'),
                         const SizedBox(height: 8),
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
                           value: settings.isEnabled,
-                          title: const Text('Enable daily control'),
+                          title: const Text('Enable App Control'),
                           onChanged: (value) {
                             _update(settings.copyWith(isEnabled: value));
                           },
@@ -298,7 +325,7 @@ class _FocusAppsSettingsScreenState extends State<FocusAppsSettingsScreen> {
                         FilledButton.tonalIcon(
                           onPressed: _openBlockedApps,
                           icon: const Icon(Icons.lock_open_rounded),
-                          label: const Text('Blocked apps and unlock'),
+                          label: const Text('Status and short breaks'),
                         ),
                       ],
                     ),

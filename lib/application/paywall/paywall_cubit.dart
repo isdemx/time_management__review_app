@@ -1,7 +1,10 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:time_tracker/application/paywall/apphud_service.dart';
 import 'package:time_tracker/application/paywall/paywall_models.dart';
 import 'package:time_tracker/application/paywall/paywall_service.dart';
+import 'package:time_tracker/core/analytics/analytics_events.dart';
+import 'package:time_tracker/core/payments/product_ids.dart';
 
 class PaywallState {
   final bool loading;
@@ -55,7 +58,13 @@ class PaywallCubit extends Cubit<PaywallState> {
 
   Future<void> load() async {
     emit(state.copyWith(loading: true, clearError: true));
-    service.trackEvent('paywall_shown', {'source': source});
+    await service.track(
+      AnalyticsEvent.paywallShown,
+      properties: {
+        ..._basePaywallProperties,
+        AnalyticsProperties.source: source,
+      },
+    );
     await service.markPaywallShown();
     try {
       final products = await service.loadProducts();
@@ -82,7 +91,6 @@ class PaywallCubit extends Cubit<PaywallState> {
   }
 
   void selectProduct(PaywallProduct product) {
-    service.trackEvent('paywall_product_selected', {'product_id': product.id});
     emit(state.copyWith(selectedProduct: product));
   }
 
@@ -97,30 +105,77 @@ class PaywallCubit extends Cubit<PaywallState> {
       return;
     }
     emit(state.copyWith(purchasing: true, clearError: true));
-    service.trackEvent('purchase_started', {'product_id': product.id});
+    final productType = _productType(product);
+    final properties = _productProperties(product, productType);
+    await service.track(
+      AnalyticsEvent.paywallPurchaseTapped,
+      properties: properties,
+    );
+    if (product.hasTrial) {
+      await service.track(
+        AnalyticsEvent.trialStarted,
+        properties: properties,
+      );
+    }
     try {
       final success = await service.purchase(product);
       if (success) {
-        service.trackEvent('purchase_completed', {'product_id': product.id});
+        await service.track(
+          AnalyticsEvent.purchaseCompleted,
+          properties: {
+            ...properties,
+            AnalyticsProperties.price: product.price,
+          },
+        );
+        await service.setUserProperties(
+          {
+            AnalyticsUserProperties.premium: true,
+            AnalyticsUserProperties.subscriptionType: productType,
+          },
+        );
         emit(state.copyWith(purchasing: false, completed: true));
       } else {
-        service.trackEvent('purchase_failed', {'product_id': product.id});
+        await service.track(
+          AnalyticsEvent.purchaseFailed,
+          properties: {
+            ...properties,
+            AnalyticsProperties.error: 'not_completed',
+          },
+        );
         emit(state.copyWith(
             purchasing: false, error: 'Purchase was not completed.'));
       }
     } catch (error) {
-      service.trackEvent('purchase_failed', {
-        'product_id': product.id,
-        'error': error.toString(),
-      });
+      await service.track(
+        AnalyticsEvent.purchaseFailed,
+        properties: {
+          ..._productProperties(product, productType),
+          AnalyticsProperties.error: error.toString(),
+        },
+      );
       emit(state.copyWith(purchasing: false, error: error.toString()));
     }
   }
 
   Future<void> restore() async {
+    await service.track(
+      AnalyticsEvent.restoreStarted,
+      properties: _basePaywallProperties,
+    );
     emit(state.copyWith(restoring: true, clearError: true));
     try {
       final restored = await service.restorePurchases();
+      await service.track(
+        restored
+            ? AnalyticsEvent.restoreCompleted
+            : AnalyticsEvent.restoreFailed,
+        properties: _basePaywallProperties,
+      );
+      if (restored) {
+        await service.setUserProperties(
+          const {AnalyticsUserProperties.premium: true},
+        );
+      }
       emit(
         state.copyWith(
           restoring: false,
@@ -129,12 +184,55 @@ class PaywallCubit extends Cubit<PaywallState> {
         ),
       );
     } catch (error) {
+      await service.track(
+        AnalyticsEvent.restoreFailed,
+        properties: {
+          ..._basePaywallProperties,
+          AnalyticsProperties.error: error.toString(),
+        },
+      );
       emit(state.copyWith(restoring: false, error: error.toString()));
     }
   }
 
   Future<void> continueFree() async {
-    service.trackEvent('paywall_closed', {'source': source});
+    await service.markPaywallClosed();
+    await service.track(
+      AnalyticsEvent.paywallClosed,
+      properties: {
+        ..._basePaywallProperties,
+        AnalyticsProperties.source: source,
+        AnalyticsProperties.closeMethod: 'continue_free',
+      },
+    );
     emit(state.copyWith(completed: true));
+  }
+
+  String _productType(PaywallProduct product) {
+    if (product.id == ProductIds.weekly) {
+      return 'weekly';
+    }
+    if (product.id == ProductIds.yearly) {
+      return 'yearly';
+    }
+    final raw = '${product.id} ${product.title}'.toLowerCase();
+    return raw.contains('week') ? 'weekly' : 'yearly';
+  }
+
+  Map<String, dynamic> get _basePaywallProperties => const {
+        AnalyticsProperties.placement: ApphudService.placementId,
+        AnalyticsProperties.paywallId: ApphudService.paywallId,
+      };
+
+  Map<String, dynamic> _productProperties(
+    PaywallProduct product,
+    String productType,
+  ) {
+    return {
+      ..._basePaywallProperties,
+      AnalyticsProperties.product: productType,
+      AnalyticsProperties.productType: productType,
+      AnalyticsProperties.productId: product.id,
+    };
   }
 }

@@ -8,9 +8,13 @@ import 'package:time_tracker/application/active_session_bar/active_session_bar_p
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
-import 'package:time_tracker/application/paywall/apphud_service.dart';
 import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/application/templates/template_seed_service.dart';
+import 'package:time_tracker/core/analytics/amplitude_service.dart';
+import 'package:time_tracker/core/analytics/analytics_events.dart';
+import 'package:time_tracker/core/analytics/analytics_service.dart';
+import 'package:time_tracker/core/analytics/appsflyer_service.dart';
+import 'package:time_tracker/core/payments/apphud_service.dart';
 import 'package:time_tracker/data/database/app_database.dart';
 import 'package:time_tracker/data/repositories/daily_rhythm_repository_impl.dart';
 import 'package:time_tracker/data/repositories/session_v2_repository_impl.dart';
@@ -38,6 +42,40 @@ import 'package:time_tracker/presentation/theme/chronika_theme.dart';
 void main() async {
   // setupLocator();
   WidgetsFlutterBinding.ensureInitialized();
+  final appsFlyerService = AppsFlyerService();
+  try {
+    await appsFlyerService.init();
+  } catch (error) {
+    debugPrint('Warning: AppsFlyer startup failed: $error');
+  }
+  final amplitudeService = AmplitudeService();
+  try {
+    await amplitudeService.init();
+  } catch (error) {
+    debugPrint('Warning: Amplitude startup failed: $error');
+  }
+  final analyticsService = AnalyticsService(
+    appsFlyerService: appsFlyerService,
+    amplitudeService: amplitudeService,
+  );
+  try {
+    await analyticsService.track(
+      AnalyticsEvent.appOpened,
+      properties: const {AnalyticsProperties.source: 'cold_start'},
+    );
+  } catch (error) {
+    debugPrint('Warning: Analytics app_opened failed: $error');
+  }
+  final apphudService = ApphudService();
+  try {
+    await apphudService.init();
+    final premium = await apphudService.syncPurchases();
+    await analyticsService.setUserProperties(
+      {AnalyticsUserProperties.premium: premium},
+    );
+  } catch (error) {
+    debugPrint('Warning: Apphud startup failed: $error');
+  }
 
   final appDatabase = AppDatabase();
   final sessionV2Repository = SessionV2RepositoryImpl(appDatabase: appDatabase);
@@ -53,8 +91,13 @@ void main() async {
     appDatabase: appDatabase,
   ).seedDefaultTemplatesIfNeeded();
   final themeController = AppThemeController();
-  final onboardingService = OnboardingService();
-  final paywallService = PaywallService(apphudService: ApphudService());
+  final onboardingService = OnboardingService(
+    analyticsService: analyticsService,
+  );
+  final paywallService = PaywallService(
+    apphudService: apphudService,
+    analyticsService: analyticsService,
+  );
   final iosScreenTimeService = MethodChannelIOSScreenTimeService();
   final iosFocusAppsSettingsService = IOSFocusAppsSettingsService();
   final activeSessionBarService = ActiveSessionBarService(
@@ -133,6 +176,15 @@ void main() async {
         ),
         RepositoryProvider<PaywallService>.value(
           value: paywallService,
+        ),
+        RepositoryProvider<AppsFlyerService>.value(
+          value: appsFlyerService,
+        ),
+        RepositoryProvider<AmplitudeService>.value(
+          value: amplitudeService,
+        ),
+        RepositoryProvider<AnalyticsService>.value(
+          value: analyticsService,
         ),
         RepositoryProvider<IOSScreenTimeService>.value(
           value: iosScreenTimeService,

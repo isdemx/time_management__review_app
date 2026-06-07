@@ -5,6 +5,7 @@
 import FlutterMacOS
 import Foundation
 
+import amplitude_flutter
 import audioplayers_darwin
 import flutter_local_notifications
 import in_app_review
@@ -15,6 +16,7 @@ import url_launcher_macos
 import wakelock_plus
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+  AmplitudeFlutterPlugin.register(with: registry.registrar(forPlugin: "AmplitudeFlutterPlugin"))
   AudioplayersDarwinPlugin.register(with: registry.registrar(forPlugin: "AudioplayersDarwinPlugin"))
   FlutterLocalNotificationsPlugin.register(with: registry.registrar(forPlugin: "FlutterLocalNotificationsPlugin"))
   InAppReviewPlugin.register(with: registry.registrar(forPlugin: "InAppReviewPlugin"))

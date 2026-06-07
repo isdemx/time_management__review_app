@@ -66,6 +66,18 @@ class AppNavigator {
 
     if (payload.startsWith('daily_rhythm:focus_finished:')) {
       final activityId = payload.split(':').last;
+      if (activityId.isEmpty) {
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const FocusModePage(
+              daySessionId: null,
+              activityId: '',
+              activityName: 'Focus Mode',
+            ),
+          ),
+        );
+        return;
+      }
       final repository = context.read<TrackableRepository>();
       final trackable = await repository.getTrackable(activityId);
       if (trackable == null) {

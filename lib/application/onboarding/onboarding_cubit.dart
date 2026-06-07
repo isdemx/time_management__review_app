@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:time_tracker/application/onboarding/onboarding_models.dart';
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
+import 'package:time_tracker/core/analytics/analytics_events.dart';
 
 class OnboardingState {
   final int stepIndex;
@@ -31,22 +32,29 @@ class OnboardingCubit extends Cubit<OnboardingState> {
 
   OnboardingCubit({required this.service}) : super(const OnboardingState());
 
-  void start() {
-    service.trackEvent('onboarding_started');
-    _trackStep(state.stepIndex);
-  }
+  void start() {}
 
   Future<bool> next() async {
     if (state.isLastStep) {
+      await _trackStepCompleted(state.stepIndex);
       await service.markOnboardingCompleted();
-      service.trackEvent('onboarding_completed');
+      await service.track(
+        AnalyticsEvent.onboardingStepCompleted,
+        properties: {
+          AnalyticsProperties.step: 'completed',
+          AnalyticsProperties.stepIndex: chronikaOnboardingSteps.length + 1,
+        },
+      );
+      await service.setUserProperties(
+        const {AnalyticsUserProperties.onboardingCompleted: true},
+      );
       emit(state.copyWith(completed: true));
       return true;
     }
 
     final nextIndex = state.stepIndex + 1;
+    await _trackStepCompleted(state.stepIndex);
     emit(state.copyWith(stepIndex: nextIndex));
-    _trackStep(nextIndex);
     return false;
   }
 
@@ -56,13 +64,16 @@ class OnboardingCubit extends Cubit<OnboardingState> {
     }
     final previousIndex = state.stepIndex - 1;
     emit(state.copyWith(stepIndex: previousIndex));
-    _trackStep(previousIndex);
   }
 
-  void _trackStep(int stepIndex) {
-    service.trackEvent('onboarding_step_viewed', {
-      'step': stepIndex + 1,
-      'screen_id': chronikaOnboardingSteps[stepIndex].id,
-    });
+  Future<void> _trackStepCompleted(int stepIndex) {
+    final step = chronikaOnboardingSteps[stepIndex];
+    return service.track(
+      AnalyticsEvent.onboardingStepCompleted,
+      properties: {
+        AnalyticsProperties.step: step.id,
+        AnalyticsProperties.stepIndex: stepIndex + 1,
+      },
+    );
   }
 }

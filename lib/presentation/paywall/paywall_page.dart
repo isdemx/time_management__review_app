@@ -47,6 +47,7 @@ class _PaywallViewState extends State<_PaywallView>
     with TickerProviderStateMixin {
   late final AnimationController _orbitController;
   late final AnimationController _pulseController;
+  String? _selectedPlanId;
 
   @override
   void initState() {
@@ -79,7 +80,8 @@ class _PaywallViewState extends State<_PaywallView>
       },
       builder: (context, state) {
         final plans = _plansForState(state);
-        final selectedId = state.selectedProduct?.id ?? plans.first.id;
+        final selectedId =
+            _selectedPlanId ?? state.selectedProduct?.id ?? plans.first.id;
         return Scaffold(
           body: DecoratedBox(
             decoration: const BoxDecoration(
@@ -144,11 +146,15 @@ class _PaywallViewState extends State<_PaywallView>
                               plan: plan,
                               selected: plan.id == selectedId,
                               pulse: _planPulse,
-                              onTap: plan.product == null
-                                  ? null
-                                  : () => context
+                              onTap: () {
+                                setState(() => _selectedPlanId = plan.id);
+                                final product = plan.product;
+                                if (product != null) {
+                                  context
                                       .read<PaywallCubit>()
-                                      .selectProduct(plan.product!),
+                                      .selectProduct(product);
+                                }
+                              },
                             ),
                             const SizedBox(height: 8),
                           ],
@@ -220,8 +226,8 @@ class _PaywallViewState extends State<_PaywallView>
       _PlanData(
         id: yearly?.id ?? 'yearly-placeholder',
         title: 'Yearly',
-        price: yearly?.price.isNotEmpty == true ? yearly!.price : r'$99',
-        detail: r'$8.25 / month',
+        price: yearly?.price.isNotEmpty == true ? yearly!.price : r'$49.99',
+        detail: r'$4.99 / month',
         badge: 'BEST VALUE',
         product: yearly,
       ),

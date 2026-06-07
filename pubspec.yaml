@@ -54,6 +54,8 @@ dependencies:
   in_app_review: ^2.0.12
   app_tracking_transparency: ^2.0.6
   apphud: ^2.3.0
+  appsflyer_sdk: ^6.15.2
+  amplitude_flutter: ^4.0.0
   audioplayers: ^6.7.0
 
 dev_dependencies:
