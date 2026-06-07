@@ -63,9 +63,17 @@ class PaywallCubit extends Cubit<PaywallState> {
         state.copyWith(
           loading: false,
           products: products,
-          selectedProduct:
-              products.where((item) => item.recommended).firstOrNull ??
-                  products.firstOrNull,
+          selectedProduct: products
+                  .where((item) =>
+                      item.recommended ||
+                      '${item.id} ${item.title}'
+                          .toLowerCase()
+                          .contains('year') ||
+                      '${item.id} ${item.title}'
+                          .toLowerCase()
+                          .contains('annual'))
+                  .firstOrNull ??
+              products.firstOrNull,
         ),
       );
     } catch (error) {
@@ -81,7 +89,11 @@ class PaywallCubit extends Cubit<PaywallState> {
   Future<void> purchaseSelected() async {
     final product = state.selectedProduct;
     if (product == null) {
-      emit(state.copyWith(error: 'Products are not available yet.'));
+      emit(
+        state.copyWith(
+          error: 'Purchases are not available in this build yet.',
+        ),
+      );
       return;
     }
     emit(state.copyWith(purchasing: true, clearError: true));

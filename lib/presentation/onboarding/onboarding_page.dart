@@ -1,10 +1,16 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:time_tracker/application/onboarding/onboarding_cubit.dart';
-import 'package:time_tracker/application/onboarding/onboarding_models.dart';
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
+import 'package:time_tracker/presentation/onboarding/app_control_onboarding_step.dart';
 import 'package:time_tracker/presentation/onboarding/att_pre_prompt_page.dart';
+import 'package:time_tracker/presentation/onboarding/control_orb_onboarding_step.dart';
+import 'package:time_tracker/presentation/onboarding/day_visualized_onboarding_step.dart';
+import 'package:time_tracker/presentation/onboarding/session_value_onboarding_step.dart';
+import 'package:time_tracker/presentation/paywall/paywall_page.dart';
 
 class OnboardingPage extends StatelessWidget {
   final VoidCallback onCompleted;
@@ -34,40 +40,118 @@ class _OnboardingView extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<OnboardingCubit, OnboardingState>(
       builder: (context, state) {
-        return Scaffold(
-          body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                      '${state.stepIndex + 1}/${chronikaOnboardingSteps.length}'),
-                  const SizedBox(height: 32),
-                  Expanded(
-                    child: Center(
-                      child: _IllustrationPlaceholder(
-                        name: state.step.illustration,
-                      ),
-                    ),
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop || state.step.id == 'onboarding_app_control') {
+              return;
+            }
+            _previous(context);
+          },
+          child: Scaffold(
+            body: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 620),
+              reverseDuration: const Duration(milliseconds: 420),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: _frameTransition,
+              child: KeyedSubtree(
+                key: ValueKey(state.step.id),
+                child: _stepBody(context, state),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _stepBody(BuildContext context, OnboardingState state) {
+    if (state.stepIndex == 0) {
+      return ControlOrbOnboardingStep(
+        onCompleted: () => _next(context),
+      );
+    }
+    if (state.stepIndex == 1) {
+      return DayVisualizedOnboardingStep(
+        onCompleted: () => _next(context),
+        onBack: null,
+      );
+    }
+    if (state.step.id == 'onboarding_app_control') {
+      return AppControlOnboardingStep(
+        onCompleted: () => _next(context),
+        onBack: () => _previous(context),
+      );
+    }
+    if (state.step.id == 'onboarding_session_value') {
+      return SessionValueOnboardingStep(
+        onCompleted: () => _next(context),
+        onBack: () => _previous(context),
+      );
+    }
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _BackCircle(onPressed: () => _previous(context)),
+            const SizedBox(height: 32),
+            Expanded(
+              child: Center(
+                child: _IllustrationPlaceholder(
+                  name: state.step.illustration,
+                ),
+              ),
+            ),
+            Text(
+              state.step.title,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
                   ),
-                  Text(
-                    state.step.title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    state.step.subtitle,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 28),
-                  FilledButton(
-                    onPressed: () => _next(context),
-                    child: Text(state.isLastStep ? 'Continue' : 'Next'),
-                  ),
-                ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              state.step.subtitle,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 28),
+            FilledButton(
+              onPressed: () => _next(context),
+              child: Text(state.isLastStep ? 'Continue' : 'Next'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _frameTransition(Widget child, Animation<double> animation) {
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return AnimatedBuilder(
+      animation: curved,
+      child: child,
+      builder: (context, child) {
+        final value = curved.value;
+        final blur = (1 - value) * 10;
+        return Opacity(
+          opacity: value.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 18),
+            child: Transform.scale(
+              scale: 0.965 + value * 0.035,
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(
+                  sigmaX: blur,
+                  sigmaY: blur,
+                ),
+                child: child,
               ),
             ),
           ),
@@ -91,8 +175,66 @@ class _OnboardingView extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => showAtt
-            ? AttPrePromptPage(onCompleted: onCompleted)
-            : _OnboardingCompletePage(onCompleted: onCompleted),
+            ? AttPrePromptPage(
+                onCompleted: () => _openPaywallThenComplete(context),
+              )
+            : _OnboardingCompletePage(
+                onCompleted: () => _openPaywallThenComplete(context),
+              ),
+      ),
+    );
+  }
+
+  void _previous(BuildContext context) {
+    context.read<OnboardingCubit>().previous();
+  }
+
+  void _openPaywallThenComplete(BuildContext context) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 560),
+        reverseTransitionDuration: const Duration(milliseconds: 360),
+        pageBuilder: (_, animation, __) {
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.97, end: 1).animate(
+                CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                ),
+              ),
+              child: PaywallPage(
+                source: 'onboarding',
+                onCompleted: onCompleted,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BackCircle extends StatelessWidget {
+  final VoidCallback? onPressed;
+
+  const _BackCircle({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      onPressed: onPressed,
+      icon: const Icon(
+        Icons.chevron_left_rounded,
+        color: Color(0xCCFFFFFF),
+        size: 28,
       ),
     );
   }

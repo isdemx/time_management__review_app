@@ -91,134 +91,134 @@ class _SocialAppTrackingSettingsScreenState
     if (!Platform.isAndroid) {
       return const _IosSocialTrackingScreen();
     }
-    return Scaffold(
-      appBar: AppBar(title: const Text('Social apps tracking')),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(-0.65, -0.95),
-            radius: 1.15,
-            colors: [Color(0xFF10192A), Color(0xFF070C14), Color(0xFF050910)],
-          ),
-        ),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
-          children: [
-            _Panel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Social app tracking',
+    return _TrackingScaffold(
+      title: 'Control app time',
+      subtitle:
+          'Track selected apps softly and count them as part of your day.',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+        children: [
+          _Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const _GoldIcon(icon: Icons.shield_outlined),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        'Chronika does not block apps in Android MVP. It helps you notice time in Instagram, TikTok, YouTube, Reddit and other apps.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.66),
+                          height: 1.32,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  value: _settings.enabled,
+                  activeThumbColor: const Color(0xFFF5B84B),
+                  activeTrackColor: const Color(0xFFF5B84B).withValues(
+                    alpha: 0.28,
+                  ),
+                  title: const Text(
+                    'Enable tracking',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Chronika does not block apps. It softly helps you count time in Instagram, TikTok, YouTube, Reddit and other apps as regular activities.',
+                  subtitle: Text(
+                    _hasPermission
+                        ? 'Usage Access is allowed'
+                        : 'Android Usage Access is required',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.62),
-                      height: 1.35,
-                      fontWeight: FontWeight.w600,
+                      color: _hasPermission
+                          ? Colors.white.withValues(alpha: 0.50)
+                          : const Color(0xFFF5B84B),
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    value: _settings.enabled,
-                    title: const Text(
-                      'Enable tracking',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    subtitle: Text(
-                      _hasPermission
-                          ? 'Usage Access is allowed'
-                          : 'Android Usage Access is required',
-                      style: TextStyle(
-                        color: _hasPermission
-                            ? Colors.white.withValues(alpha: 0.48)
-                            : const Color(0xFFFFC266),
-                      ),
-                    ),
-                    onChanged: _loading ? null : _setEnabled,
+                  onChanged: _loading ? null : _setEnabled,
+                ),
+                if (!_hasPermission) ...[
+                  const SizedBox(height: 12),
+                  _GoldButton(
+                    label: 'Open Usage Access',
+                    onPressed: _openUsageSettings,
                   ),
-                  if (!_hasPermission) ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: _openUsageSettings,
-                        child: const Text('Open Usage Access'),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
+                  const SizedBox(height: 8),
+                  Center(
+                    child: TextButton(
                       onPressed: _load,
                       child: const Text('I allowed access'),
                     ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Tracked apps',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    ),
                   ),
-                ),
-                IconButton.filled(
-                  onPressed: Platform.isAndroid ? _addApps : null,
-                  icon: const Icon(Icons.add_rounded),
-                ),
+                ],
               ],
             ),
-            const SizedBox(height: 10),
-            if (!Platform.isAndroid)
-              const _EmptyMessage('Social app tracking is Android-only in MVP.')
-            else if (_apps.isEmpty)
-              const _EmptyMessage(
-                'Choose apps you want Chronika to account for.',
-              )
-            else
-              ..._apps.map(
-                (app) {
-                  final usage = _usageFor(app.packageName);
-                  return _TrackedAppTile(
-                    app: app,
-                    usage: usage,
-                    onChanged: (enabled) async {
-                      await _repository.updateTrackedApp(
-                        app.copyWith(
-                          isEnabled: enabled,
-                          updatedAt: DateTime.now(),
-                        ),
-                      );
-                      await _load();
-                      await _monitorService.restart();
-                    },
-                    onDelete: () async {
-                      await _repository.deleteTrackedApp(app.id);
-                      await _load();
-                      await _monitorService.restart();
-                    },
-                  );
-                },
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Tracked apps',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
-          ],
-        ),
+              IconButton(
+                onPressed: Platform.isAndroid ? _addApps : null,
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFF5B84B),
+                  foregroundColor: Colors.black,
+                ),
+                icon: const Icon(Icons.add_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (!Platform.isAndroid)
+            const _EmptyMessage('Social app tracking is Android-only in MVP.')
+          else if (_apps.isEmpty)
+            const _EmptyMessage(
+              'Choose apps you want Chronika to account for.',
+            )
+          else
+            ..._apps.map(
+              (app) {
+                final usage = _usageFor(app.packageName);
+                return _TrackedAppTile(
+                  app: app,
+                  usage: usage,
+                  onChanged: (enabled) async {
+                    await _repository.updateTrackedApp(
+                      app.copyWith(
+                        isEnabled: enabled,
+                        updatedAt: DateTime.now(),
+                      ),
+                    );
+                    await _load();
+                    await _monitorService.restart();
+                  },
+                  onDelete: () async {
+                    await _repository.deleteTrackedApp(app.id);
+                    await _load();
+                    await _monitorService.restart();
+                  },
+                );
+              },
+            ),
+        ],
       ),
     );
   }
@@ -273,9 +273,10 @@ class _SocialAppPickerScreenState extends State<SocialAppPickerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Choose apps')),
-      body: FutureBuilder<List<InstalledExternalApp>>(
+    return _TrackingScaffold(
+      title: 'Choose apps',
+      subtitle: 'Select apps you want Chronika to account for.',
+      child: FutureBuilder<List<InstalledExternalApp>>(
         future: _appsFuture,
         builder: (context, snapshot) {
           final apps = snapshot.data ?? const <InstalledExternalApp>[];
@@ -290,33 +291,53 @@ class _SocialAppPickerScreenState extends State<SocialAppPickerScreen> {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
                 child: TextField(
                   controller: _searchController,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search_rounded),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded),
                     hintText: 'Search apps',
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.06),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFF5B84B),
+                      ),
+                    ),
                   ),
                 ),
               ),
               Expanded(
                 child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final app = filtered[index];
                     final selected =
                         _selectedPackages.contains(app.packageName);
-                    return CheckboxListTile(
-                      value: selected,
-                      title: Text(app.appName),
-                      subtitle: Text(app.packageName),
-                      secondary: const Icon(Icons.apps_rounded),
-                      onChanged: (value) {
+                    return _PickerAppTile(
+                      app: app,
+                      selected: selected,
+                      onTap: () {
                         setState(() {
-                          if (value == true) {
-                            _selectedPackages.add(app.packageName);
-                          } else {
+                          if (selected) {
                             _selectedPackages.remove(app.packageName);
+                          } else {
+                            _selectedPackages.add(app.packageName);
                           }
                         });
                       },
@@ -327,14 +348,11 @@ class _SocialAppPickerScreenState extends State<SocialAppPickerScreen> {
               SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _selectedPackages.isEmpty
-                          ? null
-                          : () => _continue(apps),
-                      child: const Text('Continue'),
-                    ),
+                  child: _GoldButton(
+                    label: 'Continue',
+                    onPressed: _selectedPackages.isEmpty
+                        ? null
+                        : () => _continue(apps),
                   ),
                 ),
               ),
@@ -479,9 +497,19 @@ class _SocialAppSetupScreenState extends State<SocialAppSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Set limits')),
-      body: ListView(
+    return _TrackingScaffold(
+      title: 'Set limits',
+      subtitle: 'Choose a soft daily limit and a single-session reminder.',
+      bottom: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: _GoldButton(
+            label: _saving ? 'Saving...' : 'Save tracking',
+            onPressed: _saving ? null : _save,
+          ),
+        ),
+      ),
+      child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           for (final app in widget.apps)
@@ -526,12 +554,278 @@ class _SocialAppSetupScreenState extends State<SocialAppSetupScreen> {
             ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton(
-            onPressed: _saving ? null : _save,
-            child: Text(_saving ? 'Saving...' : 'Save tracking'),
+    );
+  }
+}
+
+class _TrackingScaffold extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final Widget child;
+  final Widget? bottom;
+
+  const _TrackingScaffold({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+    this.bottom,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF050910),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.58, -0.88),
+            radius: 1.18,
+            colors: [
+              Color(0xFF171209),
+              Color(0xFF07101F),
+              Color(0xFF050910),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 16, 6),
+                child: Row(
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints.tightFor(width: 36, height: 36),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(
+                        Icons.chevron_left_rounded,
+                        color: Color(0xCCFFFFFF),
+                        size: 28,
+                      ),
+                    ),
+                    const Spacer(),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 34,
+                        height: 1.08,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      subtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.66),
+                        fontSize: 16,
+                        height: 1.30,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Expanded(child: child),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: bottom,
+    );
+  }
+}
+
+class _GoldButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onPressed;
+
+  const _GoldButton({
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: onPressed == null
+              ? null
+              : const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFF7C05A), Color(0xFFE3961F)],
+                ),
+          color: onPressed == null ? const Color(0xFF30323A) : null,
+          boxShadow: onPressed == null
+              ? null
+              : [
+                  BoxShadow(
+                    color: const Color(0xFFF5B84B).withValues(alpha: 0.26),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onPressed,
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: onPressed == null
+                      ? Colors.white.withValues(alpha: 0.34)
+                      : Colors.black,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GoldIcon extends StatelessWidget {
+  final IconData icon;
+
+  const _GoldIcon({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFFF5B84B).withValues(alpha: 0.13),
+        border: Border.all(
+          color: const Color(0xFFF5B84B).withValues(alpha: 0.36),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF5B84B).withValues(alpha: 0.14),
+            blurRadius: 20,
+          ),
+        ],
+      ),
+      child: Icon(icon, color: const Color(0xFFF5B84B)),
+    );
+  }
+}
+
+class _PickerAppTile extends StatelessWidget {
+  final InstalledExternalApp app;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PickerAppTile({
+    required this.app,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: selected
+                ? const Color(0xFFF5B84B).withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.055),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFFF5B84B)
+                  : Colors.white.withValues(alpha: 0.10),
+            ),
+          ),
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected
+                        ? const Color(0xFFF5B84B)
+                        : Colors.white.withValues(alpha: 0.34),
+                    width: 2,
+                  ),
+                ),
+                child: selected
+                    ? const Center(
+                        child: Icon(
+                          Icons.check_rounded,
+                          color: Color(0xFFF5B84B),
+                          size: 16,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              const Icon(Icons.apps_rounded, color: Color(0xFF8D6BFF)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      app.appName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      app.packageName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.44),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -605,75 +899,32 @@ class _IosSocialTrackingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Screen Time tracking')),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(-0.65, -0.95),
-            radius: 1.15,
-            colors: [Color(0xFF10192A), Color(0xFF070C14), Color(0xFF050910)],
-          ),
-        ),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
-          children: [
-            _Panel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'iOS app tracking',
+    return _TrackingScaffold(
+      title: 'Screen Time',
+      subtitle:
+          'iOS app control uses Apple Screen Time, not Android Usage Access.',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+        children: [
+          _Panel(
+            child: Row(
+              children: [
+                const _GoldIcon(icon: Icons.lock_outline_rounded),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    'Screen Time integration is configured from the Focus Apps flow. Your selected apps stay protected by Apple and remain on this device.',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
+                      color: Colors.white.withValues(alpha: 0.70),
+                      height: 1.34,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'iOS uses Apple Screen Time APIs for app-level tracking. The Android Usage Access flow is hidden here because it does not apply to iPhone.',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.62),
-                      height: 1.35,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.10),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.info_outline_rounded,
-                          color: Color(0xFF19D3C5),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Screen Time integration is not enabled in this build yet.',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.72),
-                              height: 1.3,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

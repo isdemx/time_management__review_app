@@ -93,6 +93,13 @@ flutter:
 
   assets:
     - assets/audio/
+    - assets/chronika-logo.png
+    - assets/crown.png
+    - assets/charts.png
+    - assets/lock.png
+    - assets/cloud.png
+    - assets/shield.png
+    - assets/river.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

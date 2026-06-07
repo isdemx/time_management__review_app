@@ -8,6 +8,8 @@ import 'package:time_tracker/application/active_session_bar/active_session_bar_p
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
+import 'package:time_tracker/application/paywall/apphud_service.dart';
+import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/application/templates/template_seed_service.dart';
 import 'package:time_tracker/data/database/app_database.dart';
 import 'package:time_tracker/data/repositories/daily_rhythm_repository_impl.dart';
@@ -52,6 +54,7 @@ void main() async {
   ).seedDefaultTemplatesIfNeeded();
   final themeController = AppThemeController();
   final onboardingService = OnboardingService();
+  final paywallService = PaywallService(apphudService: ApphudService());
   final iosScreenTimeService = MethodChannelIOSScreenTimeService();
   final iosFocusAppsSettingsService = IOSFocusAppsSettingsService();
   final activeSessionBarService = ActiveSessionBarService(
@@ -127,6 +130,9 @@ void main() async {
         ),
         RepositoryProvider<OnboardingService>.value(
           value: onboardingService,
+        ),
+        RepositoryProvider<PaywallService>.value(
+          value: paywallService,
         ),
         RepositoryProvider<IOSScreenTimeService>.value(
           value: iosScreenTimeService,

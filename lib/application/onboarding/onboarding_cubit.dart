@@ -50,6 +50,15 @@ class OnboardingCubit extends Cubit<OnboardingState> {
     return false;
   }
 
+  void previous() {
+    if (state.stepIndex <= 1) {
+      return;
+    }
+    final previousIndex = state.stepIndex - 1;
+    emit(state.copyWith(stepIndex: previousIndex));
+    _trackStep(previousIndex);
+  }
+
   void _trackStep(int stepIndex) {
     service.trackEvent('onboarding_step_viewed', {
       'step': stepIndex + 1,

@@ -30,12 +30,6 @@ class SocialAppNotificationService {
         }
       },
     );
-    if (Platform.isAndroid) {
-      await plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-    }
   }
 
   Future<void> showAppOpened({

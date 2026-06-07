@@ -42,11 +42,7 @@ class DailyRhythmNotificationService {
     tzdata.initializeTimeZones();
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-      iOS: DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
-      ),
+      iOS: DarwinInitializationSettings(),
     );
     await plugin.initialize(
       settings,
@@ -54,16 +50,30 @@ class DailyRhythmNotificationService {
         onPayload(response.payload);
       },
     );
+    final launchDetails = await plugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp == true) {
+      onPayload(launchDetails?.notificationResponse?.payload);
+    }
+  }
+
+  Future<void> requestPermissions() async {
+    if (Platform.isIOS) {
+      await plugin
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          );
+      return;
+    }
+
     if (Platform.isAndroid) {
       await plugin
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
           ?.requestNotificationsPermission();
-    }
-
-    final launchDetails = await plugin.getNotificationAppLaunchDetails();
-    if (launchDetails?.didNotificationLaunchApp == true) {
-      onPayload(launchDetails?.notificationResponse?.payload);
     }
   }
 

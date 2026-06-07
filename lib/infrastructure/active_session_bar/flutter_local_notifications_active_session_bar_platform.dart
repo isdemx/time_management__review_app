@@ -26,21 +26,12 @@ class FlutterLocalNotificationsActiveSessionBarPlatform
     _onCommand = onCommand;
     const initializationSettings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-      iOS: DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
-      ),
+      iOS: DarwinInitializationSettings(),
     );
     await plugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: _handleNotificationResponse,
     );
-    await plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-
     final launchDetails = await plugin.getNotificationAppLaunchDetails();
     final launchResponse = launchDetails?.notificationResponse;
     if (launchDetails?.didNotificationLaunchApp == true &&
