@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:time_tracker/presentation/onboarding/onboarding_visual_system.dart';
+
 class ControlOrbOnboardingStep extends StatefulWidget {
   final VoidCallback onCompleted;
 
@@ -179,7 +181,7 @@ class _ControlOrbOnboardingStepState extends State<ControlOrbOnboardingStep>
     final holdBoost = _holding ? 2 + _holdProgress * 8 : 0;
     final count = (_completed ? 5 : 1 + speed / 280 + holdBoost).round();
     for (var i = 0; i < count; i++) {
-      if (_particles.length > 230) break;
+      if (_particles.length > 150) break;
       final angle = _random.nextDouble() * math.pi * 2;
       final drift = Offset(math.cos(angle), math.sin(angle));
       final back = _velocity.distance == 0
@@ -246,16 +248,16 @@ class _ControlOrbOnboardingStepState extends State<ControlOrbOnboardingStep>
     _stopHoldHaptics();
     _targetTimer?.cancel();
     HapticFeedback.heavyImpact();
-    for (var i = 0; i < 210; i++) {
+    for (var i = 0; i < 108; i++) {
       final angle = _random.nextDouble() * math.pi * 2;
-      final force = 430 + _random.nextDouble() * 1150;
+      final force = 360 + _random.nextDouble() * 780;
       _particles.add(
         _OrbParticle(
           position: _position,
           velocity: Offset(math.cos(angle), math.sin(angle)) * force,
-          radius: 1.8 + _random.nextDouble() * 5.8,
-          life: 0.42 + _random.nextDouble() * 0.62,
-          maxLife: 0.42 + _random.nextDouble() * 0.62,
+          radius: 1.5 + _random.nextDouble() * 4.0,
+          life: 0.36 + _random.nextDouble() * 0.48,
+          maxLife: 0.36 + _random.nextDouble() * 0.48,
         ),
       );
     }
@@ -331,17 +333,8 @@ class _ControlOrbOnboardingStepState extends State<ControlOrbOnboardingStep>
           onPointerUp: _onPointerUp,
           onPointerCancel: _onPointerCancel,
           child: DecoratedBox(
-            decoration: const BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0.15, -0.18),
-                radius: 1.2,
-                colors: [
-                  Color(0xFF111A1C),
-                  Color(0xFF05090D),
-                  Color(0xFF020408),
-                ],
-              ),
-            ),
+            decoration:
+                const BoxDecoration(gradient: OnboardingGradients.background),
             child: Stack(
               children: [
                 Positioned.fill(
@@ -393,14 +386,13 @@ class _ControlOrbOnboardingStepState extends State<ControlOrbOnboardingStep>
                                   ? const _OrbCopy(
                                       key: ValueKey('done'),
                                       title: 'Good.\nYou got it.',
-                                      subtitle:
-                                          "Now let's see where your time goes.",
+                                      subtitle: 'Attention is easy to lose.',
                                     )
                                   : _caught
                                       ? const _OrbCopy(
                                           key: ValueKey('hold'),
                                           title: 'Hold\nyour attention.',
-                                          subtitle: 'Keep it here.',
+                                          subtitle: 'Bring it back.',
                                         )
                                       : const _OrbCopy(
                                           key: ValueKey('catch'),
@@ -430,7 +422,8 @@ class _ControlOrbOnboardingStepState extends State<ControlOrbOnboardingStep>
                                       )
                                     : const _BottomHint(
                                         key: ValueKey('catch-hint'),
-                                        text: 'Try to catch it',
+                                        text:
+                                            'Move your finger\nto catch the ball',
                                         icon: Icons.back_hand_outlined,
                                       ),
                           ),
@@ -500,7 +493,7 @@ class _ControlOrbPainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.1
-      ..color = const Color(0xFFFFB22D).withValues(alpha: 0.055);
+      ..color = OnboardingPalette.electricBlue.withValues(alpha: 0.060);
     final t = time / 1000.0;
     for (var i = 0; i < 7; i++) {
       final rect = Rect.fromCenter(
@@ -541,9 +534,10 @@ class _ControlOrbPainter extends CustomPainter {
         ..strokeWidth = 10.0 + pass * 7
         ..shader = const LinearGradient(
           colors: [
-            Color(0x99FFF5B8),
-            Color(0xA8FFC247),
-            Color(0x00FF9B14),
+            Color(0x661C6BFF),
+            Color(0x779D3CFF),
+            Color(0x44FF4FC4),
+            Color(0x00FF9D4D),
           ],
         ).createShader(Rect.fromCircle(center: visualPosition, radius: 300));
       canvas.drawPath(path, paint);
@@ -555,12 +549,12 @@ class _ControlOrbPainter extends CustomPainter {
       final progress = (particle.life / particle.maxLife).clamp(0.0, 1.0);
       final paint = Paint()
         ..color = Color.lerp(
-          const Color(0xFFFFF3AF),
-          const Color(0xFFFFA313),
-          1 - progress,
+          OnboardingPalette.electricBlue,
+          OnboardingPalette.pink,
+          (1 - progress) * 0.62,
         )!
-            .withValues(alpha: 0.75 * progress)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+            .withValues(alpha: 0.48 * progress)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2);
       canvas.drawCircle(particle.position, particle.radius * progress, paint);
     }
   }
@@ -578,7 +572,7 @@ class _ControlOrbPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2 + holdProgress * 2.2
       ..color =
-          const Color(0xFFFFC247).withValues(alpha: 0.10 + holdProgress * 0.28)
+          OnboardingPalette.purple.withValues(alpha: 0.10 + holdProgress * 0.28)
       ..maskFilter = MaskFilter.blur(
         BlurStyle.normal,
         2.5 + stage * 3.0 + holdProgress * 5.0,
@@ -592,8 +586,8 @@ class _ControlOrbPainter extends CustomPainter {
       final fieldPaint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.85
-        ..color = const Color(0xFFFFA313)
-            .withValues(alpha: 0.12 + holdProgress * 0.20)
+        ..color =
+            OnboardingPalette.pink.withValues(alpha: 0.12 + holdProgress * 0.20)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6 + holdProgress * 8);
       final t = time / 1000.0;
       for (var i = 0; i < 8 + stage * 8; i++) {
@@ -617,13 +611,13 @@ class _ControlOrbPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 1.0 + burst * 2.8
-      ..color = const Color(0xFFFFC247).withValues(alpha: 0.32 * burst)
+      ..color = OnboardingPalette.pink.withValues(alpha: 0.32 * burst)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4 + burst * 12);
     final t = time / 1000.0;
-    for (var i = 0; i < 42; i++) {
-      final angle = i / 42 * math.pi * 2 + math.sin(t + i) * 0.05;
+    for (var i = 0; i < 24; i++) {
+      final angle = i / 24 * math.pi * 2 + math.sin(t + i) * 0.05;
       final inner = 54 + reassemble * 18;
-      final outer = 155 + burst * 470 + math.sin(t * 2 + i) * 30;
+      final outer = 140 + burst * 310 + math.sin(t * 2 + i) * 24;
       canvas.drawLine(
         visualPosition + Offset(math.cos(angle), math.sin(angle)) * inner,
         visualPosition + Offset(math.cos(angle), math.sin(angle)) * outer,
@@ -634,7 +628,7 @@ class _ControlOrbPainter extends CustomPainter {
     final flashPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2 + burst * 10
-      ..color = const Color(0xFFFFE78A).withValues(alpha: 0.30 * burst)
+      ..color = OnboardingPalette.warm.withValues(alpha: 0.30 * burst)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 12 + burst * 28);
     canvas.drawCircle(
         visualPosition, 74 + (1 - burst) * 82 + burst * 260, flashPaint);
@@ -657,9 +651,13 @@ class _ControlOrbPainter extends CustomPainter {
         completed ? ((successProgress - 0.16) / 0.46).clamp(0.0, 1.0) : 1.0;
 
     final glowPaint = Paint()
-      ..color = const Color(0xFFFFA313)
-          .withValues(alpha: (0.24 + energy * 0.22) * orbAlpha)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 34 + energy * 38);
+      ..color = Color.lerp(
+        OnboardingPalette.electricBlue,
+        OnboardingPalette.purple,
+        0.62,
+      )!
+          .withValues(alpha: (0.20 + energy * 0.16) * orbAlpha)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 42 + energy * 44);
     canvas.drawCircle(
       visualPosition,
       radius + (34 + energy * 28) * (completed ? 1.0 : orbScale),
@@ -673,10 +671,11 @@ class _ControlOrbPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..shader = const SweepGradient(
           colors: [
-            Color(0xFFFFF6B9),
-            Color(0xFFFFB62B),
-            Color(0xFFFF7E22),
-            Color(0xFFFFF6B9),
+            OnboardingPalette.electricBlue,
+            OnboardingPalette.purple,
+            OnboardingPalette.pink,
+            OnboardingPalette.warm,
+            OnboardingPalette.electricBlue,
           ],
         ).createShader(
           Rect.fromCircle(center: visualPosition, radius: radius + 15),
@@ -695,12 +694,13 @@ class _ControlOrbPainter extends CustomPainter {
         visualPosition - const Offset(16, 19),
         radius * 1.55,
         [
-          const Color(0xFFFFF7C1),
-          const Color(0xFFFFBB35),
-          const Color(0xAA9D4D05).withValues(alpha: 0.66 * orbAlpha),
-          const Color(0x33291408).withValues(alpha: 0.20 * orbAlpha),
+          const Color(0xFFF4F8FF).withValues(alpha: 0.92 * orbAlpha),
+          const Color(0xFF75B8FF).withValues(alpha: 0.92 * orbAlpha),
+          OnboardingPalette.purple.withValues(alpha: 0.78 * orbAlpha),
+          OnboardingPalette.pink.withValues(alpha: 0.42 * orbAlpha),
+          OnboardingPalette.warm.withValues(alpha: 0.22 * orbAlpha),
         ],
-        [0.0, 0.28, 0.68, 1.0],
+        [0.0, 0.30, 0.58, 0.82, 1.0],
       );
     canvas.drawCircle(visualPosition, radius, orbPaint);
 
@@ -711,15 +711,16 @@ class _ControlOrbPainter extends CustomPainter {
         visualPosition - Offset(radius, radius),
         visualPosition + Offset(radius, radius),
         [
-          Colors.white.withValues(alpha: 0.42 * orbAlpha),
-          const Color(0xFFFFB12A).withValues(alpha: 0.50 * orbAlpha),
-          Colors.white.withValues(alpha: 0.10 * orbAlpha),
+          Colors.white.withValues(alpha: 0.34 * orbAlpha),
+          OnboardingPalette.electricBlue.withValues(alpha: 0.26 * orbAlpha),
+          OnboardingPalette.purple.withValues(alpha: 0.24 * orbAlpha),
+          Colors.white.withValues(alpha: 0.08 * orbAlpha),
         ],
       );
     canvas.drawCircle(visualPosition, radius, glassPaint);
 
     final starPaint = Paint()
-      ..color = const Color(0xFFFFF7C1).withValues(alpha: 0.72 * orbAlpha)
+      ..color = Colors.white.withValues(alpha: 0.72 * orbAlpha)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
     final star = Path()
       ..moveTo(visualPosition.dx, visualPosition.dy - 23 * orbScale)
@@ -823,55 +824,7 @@ class _OrbNextButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFFA313).withValues(alpha: 0.32),
-              blurRadius: 26,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(26),
-            child: Ink(
-              height: 58,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(26),
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFFFFC64F),
-                    Color(0xFFE69A21),
-                    Color(0xFFC87912),
-                  ],
-                ),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.20),
-                ),
-              ),
-              child: const Center(
-                child: Text(
-                  'Next',
-                  style: TextStyle(
-                    color: Color(0xFF120A02),
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    return OnboardingPrimaryButton(label: 'Next', onPressed: onPressed);
   }
 }
 
@@ -890,12 +843,13 @@ class _BottomHint extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, color: const Color(0xFFFFB333), size: 28),
+        Icon(icon, color: OnboardingPalette.electricBlue, size: 28),
         const SizedBox(width: 12),
         Text(
           text,
+          textAlign: TextAlign.center,
           style: const TextStyle(
-            color: Color(0xFFFFB333),
+            color: OnboardingPalette.mutedText,
             fontSize: 18,
             fontWeight: FontWeight.w800,
           ),

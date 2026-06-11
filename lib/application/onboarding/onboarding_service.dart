@@ -11,6 +11,8 @@ class OnboardingService {
   static const attPromptShownKey = 'attPromptShown';
   static const paywallShownKey = 'paywallShown';
   static const firstLaunchCompletedKey = 'firstLaunchCompleted';
+  static const appControlSelectedKey = 'appControlSelected';
+  static const sessionOnboardingCompletedKey = 'sessionOnboardingCompleted';
 
   final AnalyticsService analyticsService;
 
@@ -44,6 +46,26 @@ class OnboardingService {
   Future<void> markFirstLaunchCompleted() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(firstLaunchCompletedKey, true);
+  }
+
+  Future<bool> wasAppControlSelected() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(appControlSelectedKey) ?? false;
+  }
+
+  Future<void> markAppControlSelected(bool selected) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(appControlSelectedKey, selected);
+  }
+
+  Future<bool> isSessionOnboardingCompleted() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(sessionOnboardingCompletedKey) ?? false;
+  }
+
+  Future<void> markSessionOnboardingCompleted() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(sessionOnboardingCompletedKey, true);
   }
 
   Future<bool> shouldShowAttPrompt() async {

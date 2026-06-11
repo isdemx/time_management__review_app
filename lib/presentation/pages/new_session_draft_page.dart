@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:time_tracker/application/daily_rhythm/morning_start_service.dart';
+import 'package:time_tracker/application/paywall/paywall_models.dart';
 import 'package:time_tracker/data/utils/color_utils.dart';
 import 'package:time_tracker/domain/entities/session.dart';
 import 'package:time_tracker/domain/entities/session_trackable.dart';
@@ -14,6 +15,7 @@ import 'package:time_tracker/domain/repositories/session_v2_repository.dart';
 import 'package:time_tracker/domain/repositories/timeline_repository.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
 import 'package:time_tracker/presentation/pages/session_detail_page.dart';
+import 'package:time_tracker/presentation/utils/premium_gate.dart';
 
 class NewSessionDraftPage extends StatefulWidget {
   const NewSessionDraftPage({super.key});
@@ -57,6 +59,10 @@ class _NewSessionDraftPageState extends State<NewSessionDraftPage> {
 
   Future<void> _createAndStart(Trackable trackable) async {
     if (_creating) return;
+    final canCreate = await _canCreateActiveSession();
+    if (!canCreate) {
+      return;
+    }
     setState(() => _creating = true);
     try {
       final now = DateTime.now();
@@ -107,8 +113,32 @@ class _NewSessionDraftPageState extends State<NewSessionDraftPage> {
   Future<void> _createActivityAndStart() async {
     final name = _searchController.text.trim();
     if (name.isEmpty) return;
+    final canCreate = await _canCreateActiveSession();
+    if (!canCreate) {
+      return;
+    }
     final activity = await _activityService.createCustomActivity(name);
     await _createAndStart(activity);
+  }
+
+  Future<bool> _canCreateActiveSession() async {
+    final activeSessions = await _sessionRepository.getSessionsByStatus(
+      SessionStatus.active,
+    );
+    final pausedSessions = await _sessionRepository.getSessionsByStatus(
+      SessionStatus.paused,
+    );
+    if (activeSessions.isEmpty && pausedSessions.isEmpty) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+    return ensurePremiumAccess(
+      context,
+      feature: PremiumFeature.multipleSessions,
+      source: 'multiple_sessions_new_session',
+    );
   }
 
   Future<TrackableMode> _defaultMode(String trackableId) async {
@@ -184,7 +214,7 @@ class _NewSessionDraftPageState extends State<NewSessionDraftPage> {
                     controller: _searchController,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search_rounded),
-                      labelText: 'Find activity',
+                      labelText: 'Find and create activity',
                       hintText: 'Work, Walk, Music',
                       suffixIcon: query.isEmpty
                           ? null

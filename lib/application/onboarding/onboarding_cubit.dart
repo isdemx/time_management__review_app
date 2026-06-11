@@ -7,30 +7,38 @@ import 'package:time_tracker/core/analytics/analytics_events.dart';
 class OnboardingState {
   final int stepIndex;
   final bool completed;
+  final List<OnboardingStepData> steps;
 
   const OnboardingState({
     this.stepIndex = 0,
     this.completed = false,
+    this.steps = chronikaAppControlOnboardingSteps,
   });
 
-  OnboardingStepData get step => chronikaOnboardingSteps[stepIndex];
-  bool get isLastStep => stepIndex == chronikaOnboardingSteps.length - 1;
+  OnboardingStepData get step => steps[stepIndex];
+  bool get isLastStep => stepIndex == steps.length - 1;
 
   OnboardingState copyWith({
     int? stepIndex,
     bool? completed,
+    List<OnboardingStepData>? steps,
   }) {
     return OnboardingState(
       stepIndex: stepIndex ?? this.stepIndex,
       completed: completed ?? this.completed,
+      steps: steps ?? this.steps,
     );
   }
 }
 
 class OnboardingCubit extends Cubit<OnboardingState> {
   final OnboardingService service;
+  final OnboardingFlow flow;
 
-  OnboardingCubit({required this.service}) : super(const OnboardingState());
+  OnboardingCubit({
+    required this.service,
+    this.flow = OnboardingFlow.appControlOnly,
+  }) : super(OnboardingState(steps: onboardingStepsForFlow(flow)));
 
   void start() {}
 
@@ -42,7 +50,7 @@ class OnboardingCubit extends Cubit<OnboardingState> {
         AnalyticsEvent.onboardingStepCompleted,
         properties: {
           AnalyticsProperties.step: 'completed',
-          AnalyticsProperties.stepIndex: chronikaOnboardingSteps.length + 1,
+          AnalyticsProperties.stepIndex: state.steps.length + 1,
         },
       );
       await service.setUserProperties(
@@ -67,7 +75,7 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   }
 
   Future<void> _trackStepCompleted(int stepIndex) {
-    final step = chronikaOnboardingSteps[stepIndex];
+    final step = state.steps[stepIndex];
     return service.track(
       AnalyticsEvent.onboardingStepCompleted,
       properties: {

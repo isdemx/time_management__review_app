@@ -72,6 +72,9 @@ class PaywallCubit extends Cubit<PaywallState> {
         state.copyWith(
           loading: false,
           products: products,
+          error: products.isEmpty
+              ? 'Purchases are still loading. Check Apphud placement and App Store product setup, then try again.'
+              : null,
           selectedProduct: products
                   .where((item) =>
                       item.recommended ||
@@ -99,7 +102,8 @@ class PaywallCubit extends Cubit<PaywallState> {
     if (product == null) {
       emit(
         state.copyWith(
-          error: 'Purchases are not available in this build yet.',
+          error:
+              'Purchases are still loading. Please reopen this screen or try again in a moment.',
         ),
       );
       return;
@@ -118,8 +122,8 @@ class PaywallCubit extends Cubit<PaywallState> {
       );
     }
     try {
-      final success = await service.purchase(product);
-      if (success) {
+      final result = await service.purchase(product);
+      if (result.success) {
         await service.track(
           AnalyticsEvent.purchaseCompleted,
           properties: {
@@ -135,15 +139,17 @@ class PaywallCubit extends Cubit<PaywallState> {
         );
         emit(state.copyWith(purchasing: false, completed: true));
       } else {
+        final message = result.cancelled
+            ? result.errorMessage ?? 'Purchase cancelled.'
+            : result.errorMessage ?? 'Purchase was not completed.';
         await service.track(
           AnalyticsEvent.purchaseFailed,
           properties: {
             ...properties,
-            AnalyticsProperties.error: 'not_completed',
+            AnalyticsProperties.error: message,
           },
         );
-        emit(state.copyWith(
-            purchasing: false, error: 'Purchase was not completed.'));
+        emit(state.copyWith(purchasing: false, error: message));
       }
     } catch (error) {
       await service.track(
@@ -160,7 +166,7 @@ class PaywallCubit extends Cubit<PaywallState> {
   Future<void> restore() async {
     await service.track(
       AnalyticsEvent.restoreStarted,
-      properties: _basePaywallProperties,
+      properties: _restoreProperties,
     );
     emit(state.copyWith(restoring: true, clearError: true));
     try {
@@ -169,7 +175,7 @@ class PaywallCubit extends Cubit<PaywallState> {
         restored
             ? AnalyticsEvent.restoreCompleted
             : AnalyticsEvent.restoreFailed,
-        properties: _basePaywallProperties,
+        properties: _restoreProperties,
       );
       if (restored) {
         await service.setUserProperties(
@@ -187,7 +193,7 @@ class PaywallCubit extends Cubit<PaywallState> {
       await service.track(
         AnalyticsEvent.restoreFailed,
         properties: {
-          ..._basePaywallProperties,
+          ..._restoreProperties,
           AnalyticsProperties.error: error.toString(),
         },
       );
@@ -222,6 +228,11 @@ class PaywallCubit extends Cubit<PaywallState> {
   Map<String, dynamic> get _basePaywallProperties => const {
         AnalyticsProperties.placement: ApphudService.placementId,
         AnalyticsProperties.paywallId: ApphudService.paywallId,
+      };
+
+  Map<String, dynamic> get _restoreProperties => {
+        ..._basePaywallProperties,
+        AnalyticsProperties.source: source,
       };
 
   Map<String, dynamic> _productProperties(

@@ -6,6 +6,7 @@ import 'package:time_tracker/data/utils/color_utils.dart';
 import 'package:time_tracker/domain/entities/trackable.dart';
 import 'package:time_tracker/domain/entities/trackable_mode.dart';
 import 'package:time_tracker/presentation/utils/time_format_util.dart';
+import 'package:time_tracker/presentation/widgets/premium_badge.dart';
 
 class TrackableButton extends StatefulWidget {
   final Trackable trackable;
@@ -25,6 +26,7 @@ class TrackableButton extends StatefulWidget {
   final void Function(String modeId, Offset globalPosition)? onModeLongPressEnd;
   final void Function(String modeId, Offset globalPosition)? onModeMenuTap;
   final VoidCallback? onFocusTap;
+  final bool showPremiumBadge;
 
   const TrackableButton({
     Key? key,
@@ -43,6 +45,7 @@ class TrackableButton extends StatefulWidget {
     this.onModeLongPressEnd,
     this.onModeMenuTap,
     this.onFocusTap,
+    this.showPremiumBadge = true,
   }) : super(key: key);
 
   @override
@@ -290,6 +293,12 @@ class _TrackableButtonState extends State<TrackableButton>
                           tooltip: 'Focus',
                           onTap: widget.onFocusTap!,
                         ),
+                      ),
+                    if (showFocusButton && widget.showPremiumBadge)
+                      Positioned(
+                        right: showMenuButton ? 54 : 12,
+                        top: 49,
+                        child: const PremiumBadge(),
                       ),
                     if (showMenuButton)
                       Positioned(

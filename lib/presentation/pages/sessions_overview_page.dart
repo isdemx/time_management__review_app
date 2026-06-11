@@ -6,6 +6,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import 'package:time_tracker/application/onboarding/onboarding_service.dart';
+import 'package:time_tracker/application/paywall/paywall_models.dart';
+import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/data/utils/color_utils.dart';
 import 'package:time_tracker/domain/entities/session.dart';
 import 'package:time_tracker/domain/entities/session_template.dart';
@@ -25,7 +28,11 @@ import 'package:time_tracker/presentation/pages/daily_rhythm/focus_mode_page.dar
 import 'package:time_tracker/presentation/pages/daily_rhythm/morning_start_page.dart';
 import 'package:time_tracker/presentation/pages/new_session_draft_page.dart';
 import 'package:time_tracker/presentation/pages/session_detail_page.dart';
+import 'package:time_tracker/presentation/onboarding/session_tracking_onboarding_page.dart';
+import 'package:time_tracker/presentation/onboarding/onboarding_visual_system.dart';
+import 'package:time_tracker/presentation/utils/premium_gate.dart';
 import 'package:time_tracker/presentation/utils/time_format_util.dart';
+import 'package:time_tracker/presentation/widgets/premium_badge.dart';
 import 'package:uuid/uuid.dart';
 
 class SessionsOverviewPage extends StatelessWidget {
@@ -57,6 +64,22 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
   final Map<String, List<_SessionActivityShare>> _sessionShares = {};
   String? _sharesLoadKey;
   bool _sharesLoading = false;
+  bool _sessionOnboardingCompleted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionOnboardingState();
+  }
+
+  Future<void> _loadSessionOnboardingState() async {
+    final completed =
+        await context.read<OnboardingService>().isSessionOnboardingCompleted();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _sessionOnboardingCompleted = completed);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +129,10 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
                   .toList();
               final finishedSessions =
                   sessions.where((session) => session.isFinished).toList();
+              final showFirstSessionCta =
+                  state.sessions.isEmpty && !_sessionOnboardingCompleted;
+              final showSessionTemplates =
+                  state.sessions.isNotEmpty || _sessionOnboardingCompleted;
 
               return _SessionsBackdrop(
                 child: CustomScrollView(
@@ -135,10 +162,14 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
                         },
                       ),
                     ] else
-                      const SliverToBoxAdapter(
+                      SliverToBoxAdapter(
                         child: SafeArea(
                           bottom: false,
-                          child: SizedBox(height: 18),
+                          child: showFirstSessionCta
+                              ? _FirstSessionCtaCard(
+                                  onTap: () => _openFirstSessionEntry(context),
+                                )
+                              : const SizedBox(height: 18),
                         ),
                       ),
                     SliverToBoxAdapter(
@@ -149,38 +180,44 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
                     if (activeSessions.isEmpty)
                       SliverToBoxAdapter(
                         child: _StandaloneFocusCard(
-                          onTap: () => _openStandaloneFocus(context),
+                          onSetup: () => _openAppControl(context),
+                          onOpenFocus: () => _openStandaloneFocus(context),
                         ),
                       ),
-                    const SliverToBoxAdapter(
-                      child: _SessionsSectionTitle(
-                        title: 'Session Templates',
-                        subtitle: 'Start fresh or launch a saved rhythm',
-                        topPadding: 26,
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: SizedBox(
-                        height: 174,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: state.templates.length + 1,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 10),
-                          itemBuilder: (context, index) {
-                            if (index == 0) {
-                              return const _QuickStartNewSessionCard();
-                            }
-                            return _QuickStartTemplateCard(
-                              template: state.templates[index - 1],
-                              index: index - 1,
-                            );
-                          },
+                    if (showSessionTemplates) ...[
+                      const SliverToBoxAdapter(
+                        child: _SessionsSectionTitle(
+                          title: 'Session Templates',
+                          subtitle: 'Start fresh or launch a saved rhythm',
+                          topPadding: 26,
                         ),
                       ),
-                    ),
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 174,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            itemCount: state.templates.length + 1,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 10),
+                            itemBuilder: (context, index) {
+                              if (index == 0) {
+                                return _QuickStartNewSessionCard(
+                                  requiresPremium: activeSessions.isNotEmpty,
+                                );
+                              }
+                              return _QuickStartTemplateCard(
+                                template: state.templates[index - 1],
+                                index: index - 1,
+                                requiresPremium: activeSessions.isNotEmpty,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
                     if (finishedSessions.isNotEmpty) ...[
                       const SliverToBoxAdapter(
                         child: _SessionsSectionTitle(
@@ -383,11 +420,22 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
       ),
     );
     if (context.mounted) {
+      await _loadSessionOnboardingState();
+    }
+    if (context.mounted) {
       context.read<SessionsBloc>().add(const SessionsRequested());
     }
   }
 
   Future<void> _openAppControl(BuildContext context) async {
+    final allowed = await ensurePremiumAccess(
+      context,
+      feature: PremiumFeature.appControl,
+      source: 'app_control',
+    );
+    if (!allowed || !context.mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const FocusAppsSettingsScreen(),
@@ -395,7 +443,53 @@ class _SessionsOverviewViewState extends State<_SessionsOverviewView> {
     );
   }
 
+  Future<void> _openSessionTrackingOnboarding(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const SessionTrackingOnboardingPage(),
+      ),
+    );
+    if (context.mounted) {
+      await _loadSessionOnboardingState();
+    }
+    if (context.mounted) {
+      context.read<SessionsBloc>().add(const SessionsRequested());
+    }
+  }
+
+  Future<void> _openFirstSessionEntry(BuildContext context) async {
+    final onboardingService = context.read<OnboardingService>();
+    final completed = await onboardingService.isSessionOnboardingCompleted();
+    if (!context.mounted) {
+      return;
+    }
+    if (completed) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const NewSessionDraftPage(),
+        ),
+      );
+    } else {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const SessionTrackingOnboardingPage(),
+        ),
+      );
+    }
+    if (context.mounted) {
+      context.read<SessionsBloc>().add(const SessionsRequested());
+    }
+  }
+
   Future<void> _openStandaloneFocus(BuildContext context) async {
+    final allowed = await ensurePremiumAccess(
+      context,
+      feature: PremiumFeature.focusMode,
+      source: 'focus_mode',
+    );
+    if (!allowed || !context.mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const FocusModePage(
@@ -506,7 +600,7 @@ class _EmptyNowCard extends StatelessWidget {
               const Positioned.fill(
                 child: Opacity(
                   opacity: 0.58,
-                  child: _FlowRibbon(accent: accent, active: true),
+                  child: ChronikaFlowRibbon(accent: accent, active: true),
                 ),
               ),
               Padding(
@@ -547,6 +641,203 @@ class _EmptyNowCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FirstSessionCtaCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _FirstSessionCtaCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(26),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          splashColor: OnboardingPalette.electricBlue.withValues(alpha: 0.10),
+          highlightColor: OnboardingPalette.purple.withValues(alpha: 0.06),
+          child: Ink(
+            height: 316,
+            decoration: BoxDecoration(
+              color: const Color(0xFF081024).withValues(alpha: 0.86),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(
+                color: OnboardingPalette.indigo.withValues(alpha: 0.34),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: OnboardingPalette.indigo.withValues(alpha: 0.15),
+                  blurRadius: 36,
+                  offset: const Offset(0, 18),
+                  spreadRadius: -18,
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                const Positioned.fill(
+                  child: ChronikaFlowRibbon(
+                    accent: OnboardingPalette.purple,
+                    active: true,
+                  ),
+                ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          const Color(0xFF081024).withValues(alpha: 0.08),
+                          const Color(0xFF081024).withValues(alpha: 0.20),
+                          const Color(0xFF081024).withValues(alpha: 0.82),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.center,
+                        radius: 0.74,
+                        colors: [
+                          Colors.transparent,
+                          const Color(0xFF081024).withValues(alpha: 0.10),
+                          const Color(0xFF081024).withValues(alpha: 0.46),
+                        ],
+                        stops: const [0.0, 0.58, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            color: Colors.white.withValues(alpha: 0.055),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          child: Text(
+                            'Tap to begin',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.52),
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.2,
+                                ),
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        width: 58,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: OnboardingGradients.primaryButton,
+                          boxShadow: [
+                            BoxShadow(
+                              color: OnboardingPalette.electricBlue
+                                  .withValues(alpha: 0.32),
+                              blurRadius: 28,
+                              offset: const Offset(0, 12),
+                            ),
+                            BoxShadow(
+                              color: OnboardingPalette.purple
+                                  .withValues(alpha: 0.22),
+                              blurRadius: 38,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 34,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 280),
+                        child: Text(
+                          'Start your first session',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.94),
+                                fontWeight: FontWeight.w900,
+                                height: 1.04,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        'Track how you spend your time.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.58),
+                              fontWeight: FontWeight.w700,
+                              height: 1.24,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: OnboardingPalette.electricBlue
+                                  .withValues(alpha: 0.78),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          Text(
+                            'Session tracking',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.42),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -608,7 +899,9 @@ class _EmptyStartButton extends StatelessWidget {
 class _AppControlStatusCard extends StatefulWidget {
   final Future<void> Function() onOpenSettings;
 
-  const _AppControlStatusCard({required this.onOpenSettings});
+  const _AppControlStatusCard({
+    required this.onOpenSettings,
+  });
 
   @override
   State<_AppControlStatusCard> createState() => _AppControlStatusCardState();
@@ -620,6 +913,7 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
   IOSFocusAppsBlockingState _blockingState = IOSFocusAppsBlockingState.inactive;
   bool _authorized = false;
   bool _hasSelection = false;
+  bool _premium = false;
   bool _loading = true;
 
   @override
@@ -643,16 +937,19 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
     try {
       final settingsService = context.read<IOSFocusAppsSettingsService>();
       final screenTime = context.read<IOSScreenTimeService>();
+      final paywallService = context.read<PaywallService>();
       final settings = await settingsService.load();
       final authorized = await screenTime.isAuthorized();
       final hasSelection = await screenTime.hasSelection();
       final blockingState = await screenTime.getBlockingState();
+      final premium = await paywallService.isPremiumActive();
       if (!mounted) return;
       setState(() {
         _settings = settings;
         _authorized = authorized;
         _hasSelection = hasSelection;
         _blockingState = blockingState;
+        _premium = premium;
         _loading = false;
       });
     } catch (_) {
@@ -681,7 +978,7 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFFF5B84B);
+    const accent = OnboardingPalette.electricBlue;
     final enabled =
         _settings?.isEnabled == true && _authorized && _hasSelection;
     final now = DateTime.now();
@@ -699,6 +996,8 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
     late final IconData icon;
     late final String actionLabel;
     late final bool primaryAction;
+    late final bool showValue;
+    late final bool showReset;
 
     if (_loading) {
       title = 'App Control';
@@ -707,13 +1006,26 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
       icon = Icons.hourglass_empty_rounded;
       actionLabel = 'Settings';
       primaryAction = false;
+      showValue = true;
+      showReset = false;
+    } else if (!_premium) {
+      title = 'App Control';
+      subtitle = 'Track or block distracting apps.';
+      value = '';
+      icon = Icons.shield_outlined;
+      actionLabel = 'Unlock';
+      primaryAction = true;
+      showValue = false;
+      showReset = false;
     } else if (!enabled) {
       title = 'App Control';
-      subtitle = 'Track app limits, notifications and focus blocking.';
-      value = 'Off';
+      subtitle = 'Track or block distracting apps.';
+      value = '';
       icon = Icons.shield_outlined;
-      actionLabel = 'Turn on';
+      actionLabel = 'Set Up';
       primaryAction = true;
+      showValue = false;
+      showReset = false;
     } else if (hasTemporaryUnlock) {
       title = 'Extra time active';
       subtitle = 'Selected apps are available for a short break.';
@@ -721,6 +1033,8 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
       icon = Icons.lock_open_rounded;
       actionLabel = 'Settings';
       primaryAction = false;
+      showValue = true;
+      showReset = false;
     } else if (dailyLimitReached) {
       title = 'Daily limit reached';
       subtitle = 'Selected apps are blocked until tomorrow.';
@@ -728,14 +1042,18 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
       icon = Icons.block_rounded;
       actionLabel = 'Settings';
       primaryAction = false;
+      showValue = true;
+      showReset = true;
     } else {
       final limit = _settings?.dailyLimitMinutes;
-      title = 'App Control active';
+      title = 'App Control';
       subtitle = _modeSubtitle(_settings?.dailyMode);
       value = limit == null ? 'No limit' : '$limit min limit';
       icon = Icons.shield_rounded;
       actionLabel = 'Settings';
       primaryAction = false;
+      showValue = true;
+      showReset = true;
     }
 
     final resetRemaining = _nextMidnight(now).difference(now);
@@ -773,15 +1091,25 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 5,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
                                     color: Colors.white.withValues(alpha: 0.92),
                                     fontWeight: FontWeight.w900,
                                   ),
+                            ),
+                            if (!_premium && !_loading) const PremiumBadge(),
+                          ],
                         ),
                         const SizedBox(height: 5),
                         Text(
@@ -795,7 +1123,7 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
                                     fontWeight: FontWeight.w700,
                                   ),
                         ),
-                        if (enabled && !hasTemporaryUnlock) ...[
+                        if (showReset) ...[
                           const SizedBox(height: 6),
                           Text(
                             'Resets in ${_formatCompactDuration(resetRemaining)}',
@@ -814,17 +1142,30 @@ class _AppControlStatusCardState extends State<_AppControlStatusCard> {
                   const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        value,
-                        textAlign: TextAlign.right,
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: enabled ? accent : Colors.white70,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                      ),
-                      const SizedBox(height: 9),
+                      if (showValue) ...[
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 132),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              value,
+                              textAlign: TextAlign.right,
+                              maxLines: 1,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: enabled ? accent : Colors.white70,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 9),
+                      ],
                       _TinyPillButton(
                         label: actionLabel,
                         primary: primaryAction,
@@ -909,14 +1250,71 @@ class _TinyPillButton extends StatelessWidget {
   }
 }
 
-class _StandaloneFocusCard extends StatelessWidget {
-  final VoidCallback onTap;
+class _StandaloneFocusCard extends StatefulWidget {
+  final VoidCallback onSetup;
+  final VoidCallback onOpenFocus;
 
-  const _StandaloneFocusCard({required this.onTap});
+  const _StandaloneFocusCard({
+    required this.onSetup,
+    required this.onOpenFocus,
+  });
+
+  @override
+  State<_StandaloneFocusCard> createState() => _StandaloneFocusCardState();
+}
+
+class _StandaloneFocusCardState extends State<_StandaloneFocusCard> {
+  IOSFocusAppsSettings? _settings;
+  bool _authorized = false;
+  bool _hasSelection = false;
+  bool _premium = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final settingsService = context.read<IOSFocusAppsSettingsService>();
+      final screenTime = context.read<IOSScreenTimeService>();
+      final paywallService = context.read<PaywallService>();
+      final settings = await settingsService.load();
+      final authorized = await screenTime.isAuthorized();
+      final hasSelection = await screenTime.hasSelection();
+      final premium = await paywallService.isPremiumActive();
+      if (!mounted) return;
+      setState(() {
+        _settings = settings;
+        _authorized = authorized;
+        _hasSelection = hasSelection;
+        _premium = premium;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     const accent = Color(0xFFA579FF);
+    final configured = _settings?.focusModeBlockingEnabled == true &&
+        _authorized &&
+        _hasSelection;
+    const title = 'Focus Mode';
+    final subtitle = _premium && configured
+        ? 'Start a quiet timer with distraction blocking.'
+        : 'Block distractions during focused work.';
+    final actionLabel = _loading
+        ? '...'
+        : (!_premium ? 'Unlock' : (configured ? 'Start' : 'Set Up'));
+    final onTap = !_premium
+        ? widget.onOpenFocus
+        : (configured ? widget.onOpenFocus : widget.onSetup);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: Material(
@@ -924,7 +1322,7 @@ class _StandaloneFocusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: onTap,
+          onTap: _loading ? null : onTap,
           splashColor: accent.withValues(alpha: 0.10),
           highlightColor: accent.withValues(alpha: 0.06),
           child: _GlassPanel(
@@ -961,17 +1359,30 @@ class _StandaloneFocusCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Focus Mode',
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: Colors.white.withValues(alpha: 0.92),
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.92),
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                              ),
+                            ),
+                            if (!_premium && !_loading) ...[
+                              const SizedBox(width: 8),
+                              const PremiumBadge(),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 5),
                         Text(
-                          'Start a quiet timer without creating a session.',
+                          subtitle,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style:
@@ -984,10 +1395,11 @@ class _StandaloneFocusCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: Colors.white.withValues(alpha: 0.34),
-                    size: 16,
+                  _TinyPillButton(
+                    label: actionLabel,
+                    primary: !_premium || !configured,
+                    accent: accent,
+                    onTap: _loading ? () {} : onTap,
                   ),
                 ],
               ),
@@ -1032,8 +1444,10 @@ class _CurrentSessionCard extends StatelessWidget {
                   child: AnimatedOpacity(
                     opacity: session.isActive ? 1 : 0.42,
                     duration: const Duration(milliseconds: 250),
-                    child:
-                        _FlowRibbon(accent: accent, active: session.isActive),
+                    child: ChronikaFlowRibbon(
+                      accent: accent,
+                      active: session.isActive,
+                    ),
                   ),
                 ),
                 Padding(
@@ -1364,10 +1778,12 @@ class _ShareDetailItem extends StatelessWidget {
 class _QuickStartTemplateCard extends StatelessWidget {
   final SessionTemplate template;
   final int index;
+  final bool requiresPremium;
 
   const _QuickStartTemplateCard({
     required this.template,
     required this.index,
+    required this.requiresPremium,
   });
 
   @override
@@ -1384,9 +1800,7 @@ class _QuickStartTemplateCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
-              onTap: () => context.read<SessionsBloc>().add(
-                    SessionTemplateStarted(templateId: template.id),
-                  ),
+              onTap: () => _startTemplate(context),
               onLongPress: () => _showTemplateMenu(context),
               child: Ink(
                 decoration: BoxDecoration(
@@ -1407,16 +1821,29 @@ class _QuickStartTemplateCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        template.name,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.92),
-                                  fontWeight: FontWeight.w900,
-                                  height: 1.08,
-                                ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              template.name,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.08,
+                                  ),
+                            ),
+                          ),
+                          if (requiresPremium) ...[
+                            const SizedBox(width: 6),
+                            const PremiumBadge(),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -1463,6 +1890,22 @@ class _QuickStartTemplateCard extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _startTemplate(BuildContext context) async {
+    if (requiresPremium) {
+      final allowed = await ensurePremiumAccess(
+        context,
+        feature: PremiumFeature.multipleSessions,
+        source: 'multiple_sessions_template',
+      );
+      if (!allowed || !context.mounted) {
+        return;
+      }
+    }
+    context.read<SessionsBloc>().add(
+          SessionTemplateStarted(templateId: template.id),
+        );
   }
 
   Future<List<_TemplateTrackableViewData>> _loadTrackables(
@@ -1568,7 +2011,9 @@ class _QuickStartTemplateCard extends StatelessWidget {
 }
 
 class _QuickStartNewSessionCard extends StatelessWidget {
-  const _QuickStartNewSessionCard();
+  final bool requiresPremium;
+
+  const _QuickStartNewSessionCard({required this.requiresPremium});
 
   @override
   Widget build(BuildContext context) {
@@ -1602,15 +2047,27 @@ class _QuickStartNewSessionCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'New session',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.92),
-                          fontWeight: FontWeight.w900,
-                          height: 1.08,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'New session',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.08,
+                                  ),
                         ),
+                      ),
+                      if (requiresPremium) ...[
+                        const SizedBox(width: 6),
+                        const PremiumBadge(),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1652,6 +2109,16 @@ class _QuickStartNewSessionCard extends StatelessWidget {
   }
 
   Future<void> _openDraft(BuildContext context) async {
+    if (requiresPremium) {
+      final allowed = await ensurePremiumAccess(
+        context,
+        feature: PremiumFeature.multipleSessions,
+        source: 'multiple_sessions_new_session',
+      );
+      if (!allowed || !context.mounted) {
+        return;
+      }
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const NewSessionDraftPage(),
@@ -1660,6 +2127,110 @@ class _QuickStartNewSessionCard extends StatelessWidget {
     if (context.mounted) {
       context.read<SessionsBloc>().add(const SessionsRequested());
     }
+  }
+}
+
+class _SessionTrackingIntroCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _SessionTrackingIntroCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFFFFB84D);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(24),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          splashColor: accent.withValues(alpha: 0.10),
+          highlightColor: accent.withValues(alpha: 0.06),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D1421).withValues(alpha: 0.82),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: accent.withValues(alpha: 0.28)),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.12),
+                  blurRadius: 34,
+                  offset: const Offset(0, 18),
+                  spreadRadius: -18,
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accent.withValues(alpha: 0.16),
+                      border: Border.all(color: accent.withValues(alpha: 0.28)),
+                    ),
+                    child: const Icon(
+                      Icons.timeline_rounded,
+                      color: accent,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Track your time too',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.94),
+                          fontWeight: FontWeight.w900,
+                          height: 1.08,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Create sessions, activities and subactivities to understand where your time really goes.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.60),
+                          fontWeight: FontWeight.w700,
+                          height: 1.32,
+                        ),
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    height: 46,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFFC25D), Color(0xFFC87716)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.22),
+                          blurRadius: 22,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      'Create First Session',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: const Color(0xFF18110A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1903,155 +2474,6 @@ class _HistorySessionTile extends StatelessWidget {
     if (confirmed == true && context.mounted) {
       context.read<SessionsBloc>().add(SessionDeleted(sessionId: session.id));
     }
-  }
-}
-
-class _FlowRibbon extends StatefulWidget {
-  final Color accent;
-  final bool active;
-
-  const _FlowRibbon({
-    required this.accent,
-    required this.active,
-  });
-
-  @override
-  State<_FlowRibbon> createState() => _FlowRibbonState();
-}
-
-class _FlowRibbonState extends State<_FlowRibbon>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 4200),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        return CustomPaint(
-          painter: _FlowRibbonPainter(
-            accent: widget.accent,
-            phase: _controller.value,
-            active: widget.active,
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _FlowRibbonPainter extends CustomPainter {
-  final Color accent;
-  final double phase;
-  final bool active;
-
-  const _FlowRibbonPainter({
-    required this.accent,
-    required this.phase,
-    required this.active,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) {
-      return;
-    }
-
-    final wash = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(0.18, -0.18),
-        radius: 0.88,
-        colors: [
-          accent.withValues(alpha: active ? 0.18 : 0.08),
-          Colors.transparent,
-        ],
-      ).createShader(Offset.zero & size);
-    canvas.drawRect(Offset.zero & size, wash);
-
-    final baseY = size.height * 0.48;
-    final waveWidth = size.width / 4.3;
-    for (var line = 0; line < 22; line++) {
-      final t = line / 21;
-      final localPhase = phase * math.pi * 2 + t * 2.6;
-      final y = baseY + (t - 0.5) * size.height * 0.22;
-      final amplitude = size.height * (0.055 + t * 0.028);
-      final path = Path()..moveTo(-size.width * 0.16, y);
-      for (var i = 0; i < 6; i++) {
-        final x0 = -size.width * 0.16 + waveWidth * i;
-        final x1 = x0 + waveWidth;
-        path.cubicTo(
-          x0 + waveWidth * 0.34,
-          y + math.sin(localPhase + i * 0.88) * amplitude * 1.65,
-          x0 + waveWidth * 0.68,
-          y - math.cos(localPhase + i * 1.12) * amplitude * 1.45,
-          x1,
-          y + math.sin(localPhase + i * 0.72) * amplitude,
-        );
-      }
-
-      final glowPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = 9 - t * 5
-        ..color = accent.withValues(alpha: active ? 0.055 : 0.025)
-        ..blendMode = BlendMode.screen;
-      canvas.drawPath(path, glowPaint);
-
-      final linePaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = 1.05
-        ..shader = LinearGradient(
-          colors: [
-            accent.withValues(alpha: 0.00),
-            Color.lerp(accent, Colors.white, 0.20)!.withValues(
-              alpha: active ? 0.30 : 0.12,
-            ),
-            accent.withValues(alpha: active ? 0.18 : 0.08),
-            accent.withValues(alpha: 0.00),
-          ],
-          stops: const [0, 0.38, 0.70, 1],
-        ).createShader(Offset.zero & size)
-        ..blendMode = BlendMode.screen;
-      canvas.drawPath(path, linePaint);
-    }
-
-    final dotPaint = Paint()..blendMode = BlendMode.screen;
-    for (var dot = 0; dot < 26; dot++) {
-      final t = (dot / 26 + phase * (active ? 0.55 : 0.18)) % 1;
-      final y =
-          baseY + math.sin(t * math.pi * 4.1 + dot * 0.32) * size.height * 0.10;
-      final x = size.width * t;
-      final focus = math.sin(t * math.pi);
-      dotPaint.color = Color.lerp(accent, Colors.white, 0.20)!.withValues(
-        alpha: (active ? 0.32 : 0.12) * focus,
-      );
-      canvas.drawCircle(Offset(x, y), 1.2 + focus * 1.5, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _FlowRibbonPainter oldDelegate) {
-    return oldDelegate.accent != accent ||
-        oldDelegate.phase != phase ||
-        oldDelegate.active != active;
   }
 }
 

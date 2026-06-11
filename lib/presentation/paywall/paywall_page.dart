@@ -1,8 +1,7 @@
-import 'dart:math' as math;
-import 'dart:ui' as ui;
-
 // Keep compatibility with the current release Flutter toolchain.
 // ignore_for_file: deprecated_member_use
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -11,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:time_tracker/application/paywall/paywall_cubit.dart';
 import 'package:time_tracker/application/paywall/paywall_models.dart';
 import 'package:time_tracker/application/paywall/paywall_service.dart';
+import 'package:time_tracker/presentation/onboarding/onboarding_visual_system.dart';
 
 class PaywallPage extends StatelessWidget {
   final String source;
@@ -24,12 +24,64 @@ class PaywallPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => PaywallCubit(
-        service: context.read<PaywallService>(),
-        source: source,
-      )..load(),
-      child: _PaywallView(onCompleted: onCompleted),
+    return _PaywallAccessGate(
+      onCompleted: onCompleted,
+      child: BlocProvider(
+        create: (context) => PaywallCubit(
+          service: context.read<PaywallService>(),
+          source: source,
+        )..load(),
+        child: _PaywallView(onCompleted: onCompleted),
+      ),
+    );
+  }
+}
+
+class _PaywallAccessGate extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onCompleted;
+
+  const _PaywallAccessGate({
+    required this.child,
+    this.onCompleted,
+  });
+
+  @override
+  State<_PaywallAccessGate> createState() => _PaywallAccessGateState();
+}
+
+class _PaywallAccessGateState extends State<_PaywallAccessGate> {
+  late final Future<bool> _premiumFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _premiumFuture = context.read<PaywallService>().hasPremiumAccess();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _premiumFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF070C14),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.data == true) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) {
+              return;
+            }
+            widget.onCompleted?.call();
+            Navigator.of(context).maybePop(true);
+          });
+          return const SizedBox.shrink();
+        }
+        return widget.child;
+      },
     );
   }
 }
@@ -44,29 +96,29 @@ class _PaywallView extends StatefulWidget {
 }
 
 class _PaywallViewState extends State<_PaywallView>
-    with TickerProviderStateMixin {
-  late final AnimationController _orbitController;
-  late final AnimationController _pulseController;
+    with SingleTickerProviderStateMixin {
   String? _selectedPlanId;
+  late final AnimationController _ambientController;
 
   @override
   void initState() {
     super.initState();
-    _orbitController = AnimationController(
+    _ambientController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 20),
-    )..repeat();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 4700),
+      duration: const Duration(seconds: 18),
     )..repeat();
   }
 
   @override
   void dispose() {
-    _orbitController.dispose();
-    _pulseController.dispose();
+    _ambientController.dispose();
     super.dispose();
+  }
+
+  String formatPrice(String? value) {
+    final parsed = _parsePrice(value);
+    if (parsed == null) return value ?? '';
+    return '${parsed.currency}${parsed.amount.toStringAsFixed(2)}';
   }
 
   @override
@@ -84,130 +136,159 @@ class _PaywallViewState extends State<_PaywallView>
             _selectedPlanId ?? state.selectedProduct?.id ?? plans.first.id;
         return Scaffold(
           body: DecoratedBox(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF02081A),
-                  Color(0xFF07132D),
-                  Color(0xFF02081A),
-                ],
-              ),
-            ),
-            child: AnimatedBuilder(
-              animation: Listenable.merge([
-                _orbitController,
-                _pulseController,
-              ]),
-              builder: (context, _) {
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _PaywallOrbitPainter(
-                          progress: _orbitController.value,
-                          breath: _breath,
-                        ),
+            decoration:
+                const BoxDecoration(gradient: OnboardingGradients.background),
+            child: Stack(
+              children: [
+                const Positioned.fill(
+                  child: CustomPaint(
+                    painter: OnboardingSpectralWavePainter(
+                      progress: 0.16,
+                      intensity: 0.94,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 360,
+                  child: IgnorePointer(
+                    child: RepaintBoundary(
+                      child: AnimatedBuilder(
+                        animation: _ambientController,
+                        builder: (context, _) {
+                          return CustomPaint(
+                            painter: _PaywallBottomFlowPainter(
+                              progress: _ambientController.value,
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    SafeArea(
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(22, 14, 22, 20),
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: _CloseButton(
-                              onPressed: PaywallConfig.allowFreeVersion
-                                  ? () => context
-                                      .read<PaywallCubit>()
-                                      .continueFree()
-                                  : null,
+                  ),
+                ),
+                SafeArea(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxHeight < 760;
+                      final featureWidth =
+                          (constraints.maxWidth * 0.72).clamp(292.0, 370.0);
+                      return Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          24,
+                          compact ? 12 : 28,
+                          24,
+                          compact ? 8 : 18,
+                        ),
+                        child: Column(
+                          children: [
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _GradientHeadline(compact: compact),
+                                SizedBox(height: compact ? 5 : 8),
+                                Text(
+                                  'Take full control of your time.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: const Color(0xB8FFFFFF),
+                                    fontSize: compact ? 15 : 17,
+                                    height: 1.18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: 22),
-                          const _GradientHeadline(),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Upgrade to Premium and take full control of your time.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Color(0xB3FFFFFF),
-                              fontSize: 16,
-                              height: 1.28,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          const _FeatureList(),
-                          const SizedBox(height: 14),
-                          for (final plan in plans) ...[
-                            _PlanCard(
-                              plan: plan,
-                              selected: plan.id == selectedId,
-                              pulse: _planPulse,
-                              onTap: () {
-                                setState(() => _selectedPlanId = plan.id);
-                                final product = plan.product;
-                                if (product != null) {
-                                  context
-                                      .read<PaywallCubit>()
-                                      .selectProduct(product);
-                                }
-                              },
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          const SizedBox(height: 6),
-                          const _TrialBlock(),
-                          const SizedBox(height: 14),
-                          _PrimaryButton(
-                            label: state.purchasing
-                                ? 'Starting...'
-                                : 'Start Free Trial',
-                            onPressed: state.purchasing
-                                ? null
-                                : () => context
-                                    .read<PaywallCubit>()
-                                    .purchaseSelected(),
-                          ),
-                          if (state.error != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              state.error!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                                fontWeight: FontWeight.w700,
+                            SizedBox(height: compact ? 30 : 58),
+                            Align(
+                              alignment: Alignment.center,
+                              child: SizedBox(
+                                width: featureWidth,
+                                child: _FeatureList(compact: compact),
                               ),
                             ),
+                            SizedBox(height: compact ? 34 : 58),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final plan in plans) ...[
+                                  _PlanCard(
+                                    plan: plan,
+                                    selected: plan.id == selectedId,
+                                    compact: compact,
+                                    onTap: () {
+                                      setState(() => _selectedPlanId = plan.id);
+                                      final product = plan.product;
+                                      if (product != null) {
+                                        context
+                                            .read<PaywallCubit>()
+                                            .selectProduct(product);
+                                      }
+                                    },
+                                  ),
+                                  SizedBox(height: compact ? 8 : 10),
+                                ],
+                              ],
+                            ),
+                            SizedBox(height: compact ? 2 : 4),
+                            _TrialBlock(compact: compact),
+                            SizedBox(height: compact ? 9 : 12),
+                            _PrimaryButton(
+                              compact: compact,
+                              label: state.purchasing
+                                  ? 'Starting...'
+                                  : 'Start Free Trial',
+                              onPressed: state.purchasing
+                                  ? null
+                                  : () => context
+                                      .read<PaywallCubit>()
+                                      .purchaseSelected(),
+                            ),
+                            if (state.error != null) ...[
+                              SizedBox(height: compact ? 6 : 8),
+                              Text(
+                                state.error!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontSize: compact ? 11 : 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                            SizedBox(height: compact ? 5 : 8),
+                            _PaywallLinks(
+                              restoring: state.restoring,
+                              compact: compact,
+                            ),
                           ],
-                          const SizedBox(height: 16),
-                          _PaywallLinks(restoring: state.restoring),
-                        ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 10, top: 6),
+                      child: _CloseButton(
+                        onPressed: PaywallConfig.allowFreeVersion
+                            ? () => context.read<PaywallCubit>().continueFree()
+                            : null,
                       ),
                     ),
-                  ],
-                );
-              },
+                  ),
+                ),
+              ],
             ),
           ),
         );
       },
     );
-  }
-
-  double get _breath {
-    return 0.8 +
-        Curves.easeInOut.transform(
-              (math.sin(_pulseController.value * math.pi * 2) + 1) / 2,
-            ) *
-            0.2;
-  }
-
-  double get _planPulse {
-    final phase = math.sin(_pulseController.value * math.pi * 2);
-    return 1 + math.max(0, phase) * 0.018;
   }
 
   List<_PlanData> _plansForState(PaywallState state) {
@@ -226,19 +307,49 @@ class _PaywallViewState extends State<_PaywallView>
       _PlanData(
         id: yearly?.id ?? 'yearly-placeholder',
         title: 'Yearly',
-        price: yearly?.price.isNotEmpty == true ? yearly!.price : r'$49.99',
-        detail: r'$4.99 / month',
-        badge: 'BEST VALUE',
+        price:
+            yearly?.price.isNotEmpty == true ? formatPrice(yearly?.price) : '',
+        detail: 'Best Value',
+        periodDetail: _yearlyPeriodDetail(yearly?.price),
         product: yearly,
       ),
       _PlanData(
         id: weekly?.id ?? 'weekly-placeholder',
         title: 'Weekly',
-        price: weekly?.price.isNotEmpty == true ? weekly!.price : r'$9.99',
-        detail: r'$9.99 / week',
+        price:
+            weekly?.price.isNotEmpty == true ? formatPrice(weekly?.price) : '',
+        detail: '',
+        periodDetail: _weeklyPeriodDetail(weekly?.price),
         product: weekly,
       ),
     ];
+  }
+
+  String _yearlyPeriodDetail(String? price) {
+    final parsed = _parsePrice(price);
+    if (parsed == null) return r'$4.99 / month';
+    final monthly = parsed.amount / 12;
+    return '${parsed.currency}${monthly.toStringAsFixed(2)} / month';
+  }
+
+  String _weeklyPeriodDetail(String? price) {
+    final parsed = _parsePrice(price);
+    if (parsed == null) return r'$9.99 / week';
+    return '${parsed.currency}${parsed.amount.toStringAsFixed(2)} / week';
+  }
+
+  _ParsedPrice? _parsePrice(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final normalized = value.replaceAll(',', '.');
+    final match = RegExp(r'([^\d]*)(\d+(?:\.\d+)?)').firstMatch(normalized);
+    if (match == null) return null;
+    final amount = double.tryParse(match.group(2)!);
+    if (amount == null) return null;
+    final currency = match.group(1)?.trim();
+    return _ParsedPrice(
+      amount: amount,
+      currency: currency?.isNotEmpty == true ? currency! : r'$',
+    );
   }
 
   PaywallProduct? _findProduct(
@@ -260,36 +371,37 @@ class _PaywallViewState extends State<_PaywallView>
 }
 
 class _GradientHeadline extends StatelessWidget {
-  const _GradientHeadline();
+  final bool compact;
+
+  const _GradientHeadline({required this.compact});
 
   @override
   Widget build(BuildContext context) {
-    return RichText(
-      textAlign: TextAlign.center,
-      text: const TextSpan(
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 34,
-          height: 1.08,
-          fontWeight: FontWeight.w900,
-        ),
-        children: [
-          TextSpan(text: 'Unlock your '),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: _GradientWord('potential.'),
+    final fontSize = compact ? 35.0 : 39.0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Unlock',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: fontSize,
+            height: 0.96,
+            fontWeight: FontWeight.w900,
           ),
-        ],
-      ),
+        ),
+        _GradientWord('Full Access', fontSize: fontSize),
+      ],
     );
   }
 }
 
 class _GradientWord extends StatelessWidget {
   final String text;
+  final double fontSize;
 
-  const _GradientWord(this.text);
+  const _GradientWord(this.text, {required this.fontSize});
 
   @override
   Widget build(BuildContext context) {
@@ -303,10 +415,10 @@ class _GradientWord extends StatelessWidget {
       ).createShader(rect),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           color: Colors.white,
-          fontSize: 34,
-          height: 1.08,
+          fontSize: fontSize,
+          height: 0.98,
           fontWeight: FontWeight.w900,
         ),
       ),
@@ -315,26 +427,25 @@ class _GradientWord extends StatelessWidget {
 }
 
 class _FeatureList extends StatelessWidget {
-  const _FeatureList();
+  final bool compact;
+
+  const _FeatureList({required this.compact});
 
   static const _features = [
     _FeatureData(
+      asset: 'assets/lock.png',
+      title: 'App Blocking & Tracking',
+      glow: OnboardingPalette.violet,
+    ),
+    _FeatureData(
       asset: 'assets/crown.png',
-      title: 'Unlimited Focus Sessions',
-      body: 'Track without limits. Stay in the flow.',
-      glow: Color(0xFFF5B84B),
+      title: 'Unlimited Tracking Sessions',
+      glow: OnboardingPalette.purple,
     ),
     _FeatureData(
       asset: 'assets/charts.png',
-      title: 'Advanced Analytics',
-      body: 'Deep insights. Real progress.',
-      glow: Color(0xFF7A4DFF),
-    ),
-    _FeatureData(
-      asset: 'assets/lock.png',
       title: 'Focus Mode',
-      body: 'Block distractions. Protect your focus.',
-      glow: Color(0xFF198DFF),
+      glow: OnboardingPalette.indigo,
     ),
   ];
 
@@ -342,7 +453,8 @@ class _FeatureList extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (final feature in _features) _FeatureRow(feature: feature),
+        for (final feature in _features)
+          _FeatureRow(feature: feature, compact: compact),
       ],
     );
   }
@@ -350,56 +462,43 @@ class _FeatureList extends StatelessWidget {
 
 class _FeatureRow extends StatelessWidget {
   final _FeatureData feature;
+  final bool compact;
 
-  const _FeatureRow({required this.feature});
+  const _FeatureRow({required this.feature, required this.compact});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: EdgeInsets.symmetric(vertical: compact ? 3 : 4),
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
-            padding: const EdgeInsets.all(10),
+            width: compact ? 34 : 38,
+            height: compact ? 34 : 38,
+            padding: EdgeInsets.all(compact ? 8 : 9),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(11),
-              color: feature.glow.withOpacity(0.09),
-              border: Border.all(color: feature.glow.withOpacity(0.24)),
+              shape: BoxShape.circle,
+              color: feature.glow.withOpacity(0.12),
+              border: Border.all(color: feature.glow.withOpacity(0.12)),
               boxShadow: [
                 BoxShadow(
-                  color: feature.glow.withOpacity(0.10),
-                  blurRadius: 14,
+                  color: feature.glow.withOpacity(0.18),
+                  blurRadius: 22,
                 ),
               ],
             ),
             child: Image.asset(feature.asset, fit: BoxFit.contain),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: compact ? 11 : 13),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  feature.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  feature.body,
-                  style: const TextStyle(
-                    color: Color(0xA8FFFFFF),
-                    fontSize: 13,
-                    height: 1.16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            child: Text(
+              feature.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                height: 1.1,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -411,173 +510,118 @@ class _FeatureRow extends StatelessWidget {
 class _PlanCard extends StatelessWidget {
   final _PlanData plan;
   final bool selected;
-  final double pulse;
+  final bool compact;
   final VoidCallback? onTap;
 
   const _PlanCard({
     required this.plan,
     required this.selected,
-    required this.pulse,
+    required this.compact,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final scale = selected && plan.badge != null ? pulse : 1.0;
-    return Transform.scale(
-      scale: scale,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.fromLTRB(18, 14, 16, 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 230),
+        curve: Curves.easeOutCubic,
+        height: compact ? 68 : 74,
+        padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: const Color(0xB3071028),
+          border: Border.all(
             color: selected
-                ? const Color(0xFF19110A).withOpacity(0.72)
-                : const Color(0xFF071024).withOpacity(0.72),
-            border: Border.all(
-              color: selected
-                  ? const Color(0xFFF5B84B)
-                  : Colors.white.withOpacity(0.12),
-              width: selected ? 1.25 : 1,
-            ),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: const Color(0xFFF5B84B).withOpacity(0.26),
-                      blurRadius: 26,
-                    ),
-                  ]
-                : null,
+                ? OnboardingPalette.purple.withOpacity(0.95)
+                : Colors.white.withOpacity(0.12),
+            width: selected ? 1.25 : 1,
           ),
-          child: Row(
-            children: [
-              _RadioDot(selected: selected),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          plan.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (plan.badge != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              color: const Color(0xFFF5B84B).withOpacity(0.14),
-                            ),
-                            child: Text(
-                              plan.badge!,
-                              style: const TextStyle(
-                                color: Color(0xFFF5B84B),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                      ],
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: OnboardingPalette.purple.withOpacity(0.23),
+                    blurRadius: 28,
+                  ),
+                  BoxShadow(
+                    color: OnboardingPalette.pink.withOpacity(0.12),
+                    blurRadius: 36,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    plan.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: compact ? 18 : 20,
+                      height: 1,
+                      fontWeight: FontWeight.w800,
                     ),
-                    const SizedBox(height: 4),
+                  ),
+                  if (plan.detail.isNotEmpty) ...[
+                    SizedBox(height: compact ? 5 : 7),
                     Text(
-                      plan.title == 'Yearly'
-                          ? 'Billed yearly'
-                          : 'Billed weekly',
+                      plan.detail,
+                      maxLines: 1,
                       style: TextStyle(
                         color: selected
-                            ? const Color(0xFFF5B84B)
-                            : const Color(0x9AFFFFFF),
-                        fontSize: 12,
+                            ? OnboardingPalette.pink
+                            : const Color(0x99FFFFFF),
+                        fontSize: compact ? 12 : 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      plan.price,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: compact ? 23 : 25,
+                        height: 1,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: compact ? 4 : 5),
+                    Text(
+                      plan.periodDetail,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: const Color(0x99FFFFFF),
+                        fontSize: compact ? 10 : 11,
+                        height: 1,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 112,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        plan.price,
-                        maxLines: 1,
-                        style: TextStyle(
-                          color:
-                              selected ? const Color(0xFFF5B84B) : Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        plan.detail,
-                        maxLines: 1,
-                        style: const TextStyle(
-                          color: Color(0x99FFFFFF),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RadioDot extends StatelessWidget {
-  final bool selected;
-
-  const _RadioDot({required this.selected});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      width: 26,
-      height: 26,
-      padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: selected ? const Color(0xFFF5B84B) : const Color(0xFF6C7380),
-          width: 2,
-        ),
-      ),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: selected ? const Color(0xFFF5B84B) : Colors.transparent,
+            ),
+          ],
         ),
       ),
     );
@@ -585,23 +629,29 @@ class _RadioDot extends StatelessWidget {
 }
 
 class _TrialBlock extends StatelessWidget {
-  const _TrialBlock();
+  final bool compact;
+
+  const _TrialBlock({required this.compact});
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.verified_user_outlined, color: Color(0xFF8E4DFF), size: 27),
-        SizedBox(width: 12),
+        Icon(
+          Icons.verified_user_outlined,
+          color: OnboardingPalette.purple.withOpacity(0.92),
+          size: compact ? 20 : 22,
+        ),
+        SizedBox(width: compact ? 8 : 10),
         Flexible(
           child: Text(
             '7-day free trial. Cancel anytime.\nNo commitment. No risk.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Color(0xA8FFFFFF),
-              fontSize: 14,
-              height: 1.35,
+              color: const Color(0xA8FFFFFF),
+              fontSize: compact ? 11 : 12,
+              height: 1.22,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -613,31 +663,43 @@ class _TrialBlock extends StatelessWidget {
 
 class _PrimaryButton extends StatelessWidget {
   final String label;
+  final bool compact;
   final VoidCallback? onPressed;
 
   const _PrimaryButton({
     required this.label,
+    required this.compact,
     required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 56,
+      height: compact ? 52 : 56,
       width: double.infinity,
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          color: onPressed == null
-              ? const Color(0xFF3B3D42)
-              : const Color(0xFFF5B84B),
+          gradient: onPressed == null
+              ? null
+              : const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    OnboardingPalette.electricBlue,
+                    OnboardingPalette.indigo,
+                    OnboardingPalette.purple,
+                    OnboardingPalette.pink,
+                  ],
+                ),
+          color: onPressed == null ? const Color(0xFF20263A) : null,
           boxShadow: onPressed == null
               ? null
               : [
                   BoxShadow(
-                    color: const Color(0xFFF5B84B).withOpacity(0.34),
-                    blurRadius: 22,
-                    offset: const Offset(0, 8),
+                    color: OnboardingPalette.indigo.withOpacity(0.34),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
                   ),
                 ],
         ),
@@ -651,10 +713,10 @@ class _PrimaryButton extends StatelessWidget {
                 label,
                 style: TextStyle(
                   color: onPressed == null
-                      ? const Color(0xFF9B9CA1)
-                      : Colors.black,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+                      ? const Color(0xFF8C93A8)
+                      : Colors.white,
+                  fontSize: compact ? 18 : 19,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -667,16 +729,20 @@ class _PrimaryButton extends StatelessWidget {
 
 class _PaywallLinks extends StatelessWidget {
   final bool restoring;
+  final bool compact;
 
-  const _PaywallLinks({required this.restoring});
+  const _PaywallLinks({required this.restoring, required this.compact});
 
   @override
   Widget build(BuildContext context) {
     final style = TextButton.styleFrom(
       foregroundColor: Colors.white.withOpacity(0.50),
-      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      textStyle: TextStyle(
+        fontSize: compact ? 10.5 : 11.5,
+        fontWeight: FontWeight.w700,
+      ),
       padding: EdgeInsets.zero,
-      minimumSize: const Size(0, 32),
+      minimumSize: Size(0, compact ? 24 : 28),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
     return Row(
@@ -691,13 +757,17 @@ class _PaywallLinks extends StatelessWidget {
         const _LinkDot(),
         TextButton(
           style: style,
-          onPressed: () => _openLink('https://chronika.app/terms'),
-          child: const Text('Terms of Use'),
+          onPressed: () => _openLink(
+            'https://github.com/isdemx/time_management__review_app/blob/main/TERMS.md',
+          ),
+          child: const Text('Terms of Service'),
         ),
         const _LinkDot(),
         TextButton(
           style: style,
-          onPressed: () => _openLink('https://chronika.app/privacy'),
+          onPressed: () => _openLink(
+            'https://github.com/isdemx/time_management__review_app/blob/main/PRIVACY.md',
+          ),
           child: const Text('Privacy Policy'),
         ),
       ],
@@ -734,88 +804,120 @@ class _CloseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipOval(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.04),
-              border: Border.all(color: Colors.white.withOpacity(0.15)),
-            ),
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              onPressed: onPressed,
-              icon: const Icon(Icons.close_rounded, color: Colors.white),
-            ),
-          ),
-        ),
+    return IconButton(
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+      onPressed: onPressed,
+      icon: Icon(
+        Icons.close_rounded,
+        color: Colors.white.withOpacity(0.52),
+        size: 24,
       ),
     );
   }
 }
 
-class _PaywallOrbitPainter extends CustomPainter {
+class _PaywallBottomFlowPainter extends CustomPainter {
   final double progress;
-  final double breath;
 
-  const _PaywallOrbitPainter({
-    required this.progress,
-    required this.breath,
-  });
+  const _PaywallBottomFlowPainter({required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width * 0.5, size.height * 0.18);
-    final glow = Paint()
+    final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          const Color(0xFF1A7DFF).withOpacity(0.14 * breath),
-          const Color(0xFFFF4CCB).withOpacity(0.08 * breath),
+          OnboardingPalette.indigo.withOpacity(0.18),
+          OnboardingPalette.purple.withOpacity(0.10),
           Colors.transparent,
         ],
+        stops: const [0, 0.46, 1],
       ).createShader(
-          Rect.fromCircle(center: center, radius: size.width * 0.55));
-    canvas.drawCircle(center, size.width * 0.55, glow);
+        Rect.fromCircle(
+          center: Offset(size.width * 0.52, size.height * 0.92),
+          radius: size.width * 0.72,
+        ),
+      );
+    canvas.drawRect(Offset.zero & size, glowPaint);
 
-    final dotPaint = Paint()..style = PaintingStyle.fill;
-    for (var i = 0; i < 14; i++) {
-      final angle = progress * math.pi * 2 * (0.35 + i % 4 * 0.05) + i * 1.7;
-      final radius = size.width * (0.22 + (i % 5) * 0.04);
-      final pos = center +
-          Offset(
-            math.cos(angle) * radius,
-            math.sin(angle) * radius * 0.45,
-          );
-      dotPaint.color = Color.lerp(
-        const Color(0xFF198DFF),
-        const Color(0xFFF5B84B),
-        (i % 5) / 4,
+    final baseY = size.height * 0.78;
+    for (var i = 0; i < 7; i++) {
+      final t = (progress + i * 0.075) % 1;
+      final opacity = (0.055 - i * 0.004).clamp(0.020, 0.055);
+      final stroke = 1.0 + i * 0.18;
+      final amplitude = 22.0 + i * 5.0;
+      final yOffset = (i - 3) * 11.0;
+      final phase = t * math.pi * 2 + i * 0.62;
+      final path = Path();
+
+      for (var step = 0; step <= 80; step++) {
+        final x = size.width * step / 80;
+        final normalized = step / 80;
+        final wave = math.sin(normalized * math.pi * 2.25 + phase) +
+            math.sin(normalized * math.pi * 4.7 - phase * 0.62) * 0.26;
+        final y = baseY + yOffset + wave * amplitude;
+        if (step == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+
+      final color = Color.lerp(
+            OnboardingPalette.electricBlue,
+            i.isEven ? OnboardingPalette.purple : OnboardingPalette.pink,
+            0.58,
+          ) ??
+          OnboardingPalette.purple;
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.8)
+        ..shader = LinearGradient(
+          colors: [
+            Colors.transparent,
+            OnboardingPalette.electricBlue.withOpacity(opacity),
+            color.withOpacity(opacity * 1.25),
+            OnboardingPalette.pink.withOpacity(opacity * 0.75),
+            Colors.transparent,
+          ],
+          stops: const [0, 0.18, 0.54, 0.82, 1],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      canvas.drawPath(path, paint);
+    }
+
+    final particlePaint = Paint()..style = PaintingStyle.fill;
+    for (var i = 0; i < 16; i++) {
+      final t = (progress * (0.42 + i * 0.013) + i * 0.071) % 1;
+      final x = size.width * ((i * 0.173 + t * 0.18) % 1);
+      final y = size.height * (0.55 + ((i * 0.137 + t * 0.38) % 0.43));
+      final pulse = 0.5 + 0.5 * math.sin(progress * math.pi * 2 + i);
+      particlePaint.color = Color.lerp(
+        OnboardingPalette.indigo,
+        OnboardingPalette.pink,
+        pulse,
       )!
-          .withOpacity(0.18);
-      canvas.drawCircle(pos, 1.2 + (i % 4) * 0.8, dotPaint);
+          .withOpacity(0.035 + pulse * 0.025);
+      canvas.drawCircle(Offset(x, y), 1.4 + pulse * 1.8, particlePaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _PaywallOrbitPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.breath != breath;
+  bool shouldRepaint(covariant _PaywallBottomFlowPainter oldDelegate) {
+    return oldDelegate.progress != progress;
   }
 }
 
 class _FeatureData {
   final String asset;
   final String title;
-  final String body;
   final Color glow;
 
   const _FeatureData({
     required this.asset,
     required this.title,
-    required this.body,
     required this.glow,
   });
 }
@@ -825,7 +927,7 @@ class _PlanData {
   final String title;
   final String price;
   final String detail;
-  final String? badge;
+  final String periodDetail;
   final PaywallProduct? product;
 
   const _PlanData({
@@ -833,7 +935,17 @@ class _PlanData {
     required this.title,
     required this.price,
     required this.detail,
-    this.badge,
+    required this.periodDetail,
     this.product,
+  });
+}
+
+class _ParsedPrice {
+  final double amount;
+  final String currency;
+
+  const _ParsedPrice({
+    required this.amount,
+    required this.currency,
   });
 }

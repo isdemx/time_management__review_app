@@ -14,18 +14,34 @@ struct ChronikaLiveActivityExtension: Widget {
         .activityBackgroundTint(Color.clear)
         .activitySystemActionForegroundColor(.white)
     } dynamicIsland: { context in
-      DynamicIsland {
-        DynamicIslandExpandedRegion(.center) {
-          ChronikaTimerText(context: context, short: true)
+      let accent = Color(hex: value(context, "trackableColor", "#246BFE")).boostedForGlass()
+      let compactOnly = bool(context, "compactIslandMode", false)
+
+      return DynamicIsland {
+        DynamicIslandExpandedRegion(.leading) {
+          ChronikaIslandExpandedLeading(context: context, accent: accent)
+        }
+        DynamicIslandExpandedRegion(.trailing) {
+          ChronikaIslandExpandedTrailing(context: context, accent: accent)
+        }
+        DynamicIslandExpandedRegion(.bottom) {
+          ChronikaIslandExpandedBottom(context: context, accent: accent)
         }
       } compactLeading: {
-        EmptyView()
+        if compactOnly {
+          Color.clear
+            .frame(width: 1, height: 1)
+        } else {
+          ChronikaIslandAccentDot(accent: accent, compact: true)
+            .frame(width: 10, height: 10, alignment: .leading)
+        }
       } compactTrailing: {
-        ChronikaTimerText(context: context, short: true)
+        ChronikaIslandCompactTimer(context: context, accent: accent)
       } minimal: {
-        EmptyView()
+        ChronikaIslandAccentDot(accent: accent, compact: false)
+          .frame(width: 8, height: 8)
       }
-      .keylineTint(Color.clear)
+      .keylineTint(accent)
     }
   }
 }
@@ -109,6 +125,7 @@ private struct ChronikaCurrentActivityPanel: View {
 
   var body: some View {
     let modeCount = min(Int(number(context, "modeCount", 0)), 4)
+    let visibleModeCount = min(modeCount, 2)
 
     ZStack(alignment: .leading) {
       Rectangle()
@@ -119,39 +136,54 @@ private struct ChronikaCurrentActivityPanel: View {
 
       HStack(alignment: .top, spacing: compact ? 10 : 12) {
         VStack(alignment: .leading, spacing: compact ? 7 : 8) {
-          VStack(alignment: .leading, spacing: 1) {
-            Text(value(context, "trackableName", "Activity"))
-              .font((compact ? Font.headline : Font.title3).weight(.black))
-              .lineLimit(1)
-              .minimumScaleFactor(0.64)
-            ChronikaDurationText(
-              context: context,
-              durationKey: "trackableDurationSeconds",
-              fallbackKey: "trackableDurationSeconds",
-              active: bool(context, "isActive", true),
-              font: (compact ? Font.headline : Font.title3).weight(.black),
-              accent: accent.boostedForGlass()
-            )
+          VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-              Text(value(context, "activeModeName", "main"))
-                .font(Font.caption2.weight(.black))
-                .foregroundStyle(.white.opacity(0.62))
+              Text(displayValue(context, "trackableName", "Activity"))
+                .font((compact ? Font.headline : Font.title3).weight(.black))
                 .lineLimit(1)
-                .minimumScaleFactor(0.72)
+                .minimumScaleFactor(0.70)
+                .layoutPriority(4)
+              Text(":")
+                .font((compact ? Font.headline : Font.title3).weight(.black))
+                .foregroundStyle(.white.opacity(0.70))
+                .fixedSize()
+              ChronikaDurationText(
+                context: context,
+                durationKey: "trackableDurationSeconds",
+                fallbackKey: "trackableDurationSeconds",
+                active: bool(context, "isActive", true),
+                font: (compact ? Font.headline : Font.title3).weight(.black),
+                accent: accent.boostedForGlass()
+              )
+              .layoutPriority(1)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+              Text(displayValue(context, "activeModeName", "main"))
+                .font(Font.caption.weight(.black))
+                .foregroundStyle(.white.opacity(0.70))
+                .lineLimit(1)
+                .minimumScaleFactor(0.76)
+                .layoutPriority(4)
+              Text(":")
+                .font(Font.caption.weight(.black))
+                .foregroundStyle(.white.opacity(0.54))
+                .fixedSize()
               ChronikaDurationText(
                 context: context,
                 durationKey: "activeModeDurationSeconds",
                 fallbackKey: "trackableDurationSeconds",
                 active: bool(context, "isActive", true),
-                font: Font.caption2.weight(.black),
-                accent: accent.boostedForGlass().opacity(0.88)
+                font: Font.caption.weight(.black),
+                accent: accent.boostedForGlass().opacity(0.92)
               )
+              .layoutPriority(1)
             }
           }
 
           if shouldShowModes(context: context, prefix: "mode", count: modeCount) {
-            HStack(spacing: 5) {
-              ForEach(0..<modeCount, id: \.self) { index in
+            HStack(spacing: 6) {
+              ForEach(0..<visibleModeCount, id: \.self) { index in
                 ChronikaModeControl(
                   context: context,
                   index: index,
@@ -165,23 +197,9 @@ private struct ChronikaCurrentActivityPanel: View {
           }
         }
 
-        Spacer(minLength: 8)
+        Spacer(minLength: 20)
 
-        VStack(alignment: .trailing, spacing: compact ? 3 : 4) {
-          Text(value(context, "sessionName", "Session"))
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(.white.opacity(0.68))
-            .lineLimit(1)
-            .minimumScaleFactor(0.70)
-          ChronikaDurationText(
-            context: context,
-            durationKey: "sessionDurationSeconds",
-            fallbackKey: "trackableDurationSeconds",
-            active: bool(context, "isActive", true),
-            font: Font.caption.weight(.black),
-            accent: .white.opacity(0.86)
-          )
-          .frame(maxWidth: .infinity, alignment: .trailing)
+        VStack {
           Link(destination: sessionUrl) {
             ChronikaCircleIcon(
               systemName: "arrow.up.right",
@@ -190,11 +208,12 @@ private struct ChronikaCurrentActivityPanel: View {
               large: false
             )
           }
+          Spacer(minLength: 0)
         }
-        .frame(width: compact ? 92 : 112, alignment: .trailing)
+        .padding(.top, compact ? 2 : 3)
       }
       .padding(.leading, compact ? 13 : 16)
-      .padding(.trailing, compact ? 8 : 10)
+      .padding(.trailing, compact ? 14 : 16)
       .padding(.vertical, compact ? 5 : 6)
     }
   }
@@ -209,6 +228,7 @@ private struct ChronikaPreviousActivityRow: View {
 
   var body: some View {
     let modeCount = min(Int(number(context, "previousModeCount", 0)), 4)
+    let visibleModeCount = min(modeCount, 2)
 
     HStack(alignment: .center, spacing: 12) {
       Rectangle()
@@ -218,10 +238,11 @@ private struct ChronikaPreviousActivityRow: View {
 
       VStack(alignment: .leading, spacing: compact ? 4 : 5) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(value(context, "previousTrackableName", "Previous"))
+          Text(displayValue(context, "previousTrackableName", "Previous"))
             .font((compact ? Font.subheadline : Font.headline).weight(.black))
             .lineLimit(1)
             .minimumScaleFactor(0.64)
+            .layoutPriority(3)
           Text(formatDuration(Int(number(context, "previousTrackableDurationSeconds", 0))))
             .monospacedDigit()
             .font((compact ? Font.caption : Font.subheadline).weight(.black))
@@ -231,8 +252,8 @@ private struct ChronikaPreviousActivityRow: View {
         }
 
         if shouldShowModes(context: context, prefix: "previousMode", count: modeCount) {
-          HStack(spacing: 5) {
-            ForEach(0..<modeCount, id: \.self) { index in
+          HStack(spacing: 6) {
+            ForEach(0..<visibleModeCount, id: \.self) { index in
               ChronikaPreviousModeControl(
                 context: context,
                 index: index,
@@ -679,9 +700,11 @@ private struct ChronikaModePillLabel: View {
       .font((compact ? Font.caption2 : Font.caption).weight(.black))
       .foregroundStyle(isActive ? accent : Color.white.opacity(0.76))
       .lineLimit(1)
-      .minimumScaleFactor(0.72)
-      .padding(.horizontal, compact ? 8 : 10)
-      .padding(.vertical, compact ? 4 : 5)
+      .minimumScaleFactor(0.78)
+      .fixedSize(horizontal: true, vertical: false)
+      .padding(.horizontal, compact ? 10 : 13)
+      .padding(.vertical, compact ? 5 : 6)
+      .frame(minWidth: compact ? 56 : 72, minHeight: compact ? 25 : 29)
       .background(isActive ? accent.opacity(0.24) : accent.opacity(0.07), in: Capsule())
       .overlay(
         Capsule()
@@ -698,6 +721,124 @@ private struct ChronikaModePillLabel: View {
           )
       )
       .shadow(color: .black.opacity(0.035), radius: 1.2, x: 0, y: 1)
+  }
+}
+
+@available(iOSApplicationExtension 16.1, *)
+private struct ChronikaIslandAccentDot: View {
+  let accent: Color
+  let compact: Bool
+
+  var body: some View {
+    Circle()
+      .fill(accent)
+      .frame(width: compact ? 8 : 7, height: compact ? 8 : 7)
+  }
+}
+
+@available(iOSApplicationExtension 16.1, *)
+private struct ChronikaIslandCompactTimer: View {
+  let context: ActivityViewContext<LiveActivitiesAppAttributes>
+  let accent: Color
+
+  var body: some View {
+    let seconds = Int(number(context, "trackableDurationSeconds", 0))
+    let active = bool(context, "isActive", true)
+    let useLiveTimer = active && seconds < 3600
+
+    Group {
+      if useLiveTimer {
+        if #available(iOSApplicationExtension 17.0, *) {
+          Text(timerInterval: timerRange(context), countsDown: false, showsHours: false)
+        } else {
+          Text(formatIslandCompactDuration(seconds))
+        }
+      } else {
+        Text(formatIslandCompactDuration(seconds))
+      }
+    }
+    .font(.system(size: 11, weight: .bold, design: .rounded))
+    .monospacedDigit()
+    .foregroundStyle(accent)
+    .lineLimit(1)
+    .minimumScaleFactor(0.65)
+    .frame(maxWidth: .minimum(44, 44), alignment: .trailing)
+  }
+
+  private func timerRange(
+    _ context: ActivityViewContext<LiveActivitiesAppAttributes>
+  ) -> ClosedRange<Date> {
+    let duration = number(context, "trackableDurationSeconds", 0)
+    let updatedAt = Date(timeIntervalSince1970: number(context, "updatedAtMillis", 0) / 1000)
+    let start = updatedAt.addingTimeInterval(-duration)
+    return start...Date.distantFuture
+  }
+}
+
+@available(iOSApplicationExtension 16.1, *)
+private struct ChronikaIslandExpandedLeading: View {
+  let context: ActivityViewContext<LiveActivitiesAppAttributes>
+  let accent: Color
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(displayValue(context, "trackableName", "Activity"))
+        .font(.caption.weight(.black))
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+      Text(displayValue(context, "activeModeName", "main"))
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(.white.opacity(0.68))
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+@available(iOSApplicationExtension 16.1, *)
+private struct ChronikaIslandExpandedTrailing: View {
+  let context: ActivityViewContext<LiveActivitiesAppAttributes>
+  let accent: Color
+
+  var body: some View {
+    VStack(alignment: .trailing, spacing: 4) {
+      ChronikaTimerText(context: context, short: false)
+        .foregroundStyle(accent)
+      Text(bool(context, "isActive", true) ? "running" : "paused")
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(.white.opacity(0.62))
+        .textCase(.uppercase)
+    }
+    .frame(maxWidth: .infinity, alignment: .trailing)
+  }
+}
+
+@available(iOSApplicationExtension 16.1, *)
+private struct ChronikaIslandExpandedBottom: View {
+  let context: ActivityViewContext<LiveActivitiesAppAttributes>
+  let accent: Color
+
+  var body: some View {
+    HStack(spacing: 8) {
+      ChronikaIslandAccentDot(accent: accent, compact: true)
+      Text(displayValue(context, "activeModeName", "main"))
+        .font(.caption2.weight(.black))
+        .foregroundStyle(.white.opacity(0.78))
+        .lineLimit(1)
+      Text("·")
+        .font(.caption2.weight(.black))
+        .foregroundStyle(.white.opacity(0.42))
+      ChronikaDurationText(
+        context: context,
+        durationKey: "activeModeDurationSeconds",
+        fallbackKey: "trackableDurationSeconds",
+        active: bool(context, "isActive", true),
+        font: .caption2.weight(.black),
+        accent: accent.opacity(0.92)
+      )
+      Spacer(minLength: 0)
+    }
   }
 }
 
@@ -752,6 +893,16 @@ private func value(
   _ fallback: String
 ) -> String {
   sharedDefaults.string(forKey: context.attributes.prefixedKey(key)) ?? fallback
+}
+
+private func displayValue(
+  _ context: ActivityViewContext<LiveActivitiesAppAttributes>,
+  _ key: String,
+  _ fallback: String
+) -> String {
+  let rawValue = value(context, key, fallback)
+    .trimmingCharacters(in: .whitespacesAndNewlines)
+  return rawValue.isEmpty ? fallback : rawValue
 }
 
 private func number(
@@ -815,6 +966,19 @@ private func formatDuration(_ seconds: Int) -> String {
   let secs = seconds % 60
   if hours > 0 {
     return "\(hours):\(String(format: "%02d", minutes)):\(String(format: "%02d", secs))"
+  }
+  return "\(minutes):\(String(format: "%02d", secs))"
+}
+
+private func formatIslandCompactDuration(_ seconds: Int) -> String {
+  if seconds < 60 {
+    return "\(max(seconds, 0))s"
+  }
+  let hours = seconds / 3600
+  let minutes = (seconds % 3600) / 60
+  let secs = seconds % 60
+  if hours > 0 {
+    return "\(hours):\(String(format: "%02d", minutes))"
   }
   return "\(minutes):\(String(format: "%02d", secs))"
 }

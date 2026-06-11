@@ -27,15 +27,15 @@ class PaywallService {
     return apphudService.getMainPaywall();
   }
 
-  Future<bool> purchase(PaywallProduct product) {
+  Future<PurchaseResult> purchase(PaywallProduct product) {
     return apphudService.purchase(product);
   }
 
-  Future<bool> purchaseWeekly() {
+  Future<PurchaseResult> purchaseWeekly() {
     return apphudService.purchaseWeekly();
   }
 
-  Future<bool> purchaseYearly() {
+  Future<PurchaseResult> purchaseYearly() {
     return apphudService.purchaseYearly();
   }
 
@@ -55,15 +55,16 @@ class PaywallService {
     return apphudService.syncPurchases();
   }
 
+  Future<void> enableDebugPremiumOverride() {
+    return apphudService.enableDebugPremiumOverride();
+  }
+
   Future<bool> canUse(PremiumFeature feature) async {
     switch (feature) {
-      case PremiumFeature.focusSessions:
-      case PremiumFeature.ambientSounds:
-      case PremiumFeature.reflectionHistory:
-      case PremiumFeature.weeklyInsights:
-      case PremiumFeature.smartSuggestions:
-      case PremiumFeature.advancedAnalytics:
-      case PremiumFeature.unlimitedHistory:
+      case PremiumFeature.focusMode:
+      case PremiumFeature.appControl:
+      case PremiumFeature.appBlocking:
+      case PremiumFeature.multipleSessions:
         return isPremiumActive();
     }
   }

@@ -18,6 +18,7 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A1B2C3D4E5F60718293A4B5C /* ChronikaLiveActivityExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5B /* ChronikaLiveActivityExtension.swift */; };
 		A1B2C3D4E5F60718293A4B5D /* ChronikaLiveActivityExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5A /* ChronikaLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C29B63EC2FD6C1F30052E70D /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C29B63EB2FD6C1F30052E70D /* StoreKit.framework */; };
 		C4F2A1019E184E8BB5E6D001 /* ChronikaLiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */; };
 		C4F2A1019E184E8BB5E6D002 /* ChronikaLiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */; };
 		C4F2A1019E184E8BB5E6D003 /* ChronikaLiveActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */; };
@@ -110,6 +111,7 @@
 		A1B2C3D4E5F60718293A4B57 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5A /* ChronikaLiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ChronikaLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B5B /* ChronikaLiveActivityExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaLiveActivityExtension.swift; sourceTree = "<group>"; };
+		C29B63EB2FD6C1F30052E70D /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		C4F2A1019E184E8BB5E6D101 /* ChronikaLiveActivityShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaLiveActivityShared.swift; sourceTree = "<group>"; };
 		C4F2A1019E184E8BB5E6D102 /* ChronikaLiveActivityIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronikaLiveActivityIntents.swift; sourceTree = "<group>"; };
 		D189E4EFA062754FD678760D /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
@@ -140,6 +142,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				306CF9BF19E64165DBB5F85C /* Pods_Runner.framework in Frameworks */,
+				C29B63EC2FD6C1F30052E70D /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,6 +260,7 @@
 		ABD875F41652CA186C7B5535 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				C29B63EB2FD6C1F30052E70D /* StoreKit.framework */,
 				870D441E5E9AC25116ABB76C /* Pods_Runner.framework */,
 				9034FFB1341F8B64E01297BF /* Pods_RunnerTests.framework */,
 			);

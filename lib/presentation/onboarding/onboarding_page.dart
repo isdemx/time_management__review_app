@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:time_tracker/application/onboarding/onboarding_cubit.dart';
+import 'package:time_tracker/application/onboarding/onboarding_models.dart';
 import 'package:time_tracker/application/onboarding/onboarding_service.dart';
+import 'package:time_tracker/application/paywall/paywall_service.dart';
+import 'package:time_tracker/presentation/onboarding/attention_final_onboarding_step.dart';
 import 'package:time_tracker/presentation/onboarding/app_control_onboarding_step.dart';
 import 'package:time_tracker/presentation/onboarding/att_pre_prompt_page.dart';
 import 'package:time_tracker/presentation/onboarding/control_orb_onboarding_step.dart';
@@ -14,10 +17,12 @@ import 'package:time_tracker/presentation/paywall/paywall_page.dart';
 
 class OnboardingPage extends StatelessWidget {
   final VoidCallback onCompleted;
+  final OnboardingFlow flow;
 
   const OnboardingPage({
     super.key,
     required this.onCompleted,
+    this.flow = OnboardingFlow.appControlOnly,
   });
 
   @override
@@ -25,6 +30,7 @@ class OnboardingPage extends StatelessWidget {
     return BlocProvider(
       create: (context) => OnboardingCubit(
         service: context.read<OnboardingService>(),
+        flow: flow,
       )..start(),
       child: _OnboardingView(onCompleted: onCompleted),
     );
@@ -72,10 +78,10 @@ class _OnboardingView extends StatelessWidget {
         onCompleted: () => _next(context),
       );
     }
-    if (state.stepIndex == 1) {
+    if (state.step.id == 'onboarding_day_visualized') {
       return DayVisualizedOnboardingStep(
         onCompleted: () => _next(context),
-        onBack: null,
+        onBack: () => _previous(context),
       );
     }
     if (state.step.id == 'onboarding_app_control') {
@@ -86,6 +92,12 @@ class _OnboardingView extends StatelessWidget {
     }
     if (state.step.id == 'onboarding_session_value') {
       return SessionValueOnboardingStep(
+        onCompleted: () => _next(context),
+        onBack: () => _previous(context),
+      );
+    }
+    if (state.step.id == 'onboarding_attention_final') {
+      return AttentionFinalOnboardingStep(
         onCompleted: () => _next(context),
         onBack: () => _previous(context),
       );
@@ -176,46 +188,55 @@ class _OnboardingView extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => showAtt
             ? AttPrePromptPage(
-                onCompleted: () => _openPaywallThenComplete(context),
+                onCompleted: () => _completeAfterPermissions(context),
               )
             : _OnboardingCompletePage(
-                onCompleted: () => _openPaywallThenComplete(context),
+                onCompleted: () => _completeAfterPermissions(context),
               ),
       ),
     );
+  }
+
+  Future<void> _completeAfterPermissions(BuildContext context) async {
+    final service = context.read<OnboardingService>();
+    final shouldShowPaywall = await service.wasAppControlSelected();
+    if (!context.mounted) {
+      return;
+    }
+    if (!shouldShowPaywall) {
+      onCompleted();
+      return;
+    }
+
+    final alreadyPremium =
+        await context.read<PaywallService>().hasPremiumAccess();
+    if (!context.mounted) {
+      return;
+    }
+    if (alreadyPremium) {
+      onCompleted();
+      return;
+    }
+
+    var completedFromPaywall = false;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PaywallPage(
+          source: 'onboarding_app_control',
+          onCompleted: () {
+            completedFromPaywall = true;
+            onCompleted();
+          },
+        ),
+      ),
+    );
+    if (!completedFromPaywall) {
+      onCompleted();
+    }
   }
 
   void _previous(BuildContext context) {
     context.read<OnboardingCubit>().previous();
-  }
-
-  void _openPaywallThenComplete(BuildContext context) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 560),
-        reverseTransitionDuration: const Duration(milliseconds: 360),
-        pageBuilder: (_, animation, __) {
-          return FadeTransition(
-            opacity: CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            ),
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.97, end: 1).animate(
-                CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutCubic,
-                ),
-              ),
-              child: PaywallPage(
-                source: 'onboarding',
-                onCompleted: onCompleted,
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 }
 

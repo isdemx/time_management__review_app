@@ -1,65 +1,150 @@
-# Terms & Conditions
+# Privacy Policy
 
-Last updated: May 2026
+Last updated: June 2026
 
 ## Introduction
 
-Welcome to Trackable.
+Chronika respects your privacy.
 
-Trackable is a local productivity and time-tracking application designed to help users track sessions, tasks, and activities in real time.
+This Privacy Policy explains what information may be collected when you use Chronika and how that information is used.
 
-By using the app, you agree to these Terms & Conditions.
-
----
-
-## Usage
-
-You may use Trackable for personal and non-commercial purposes.
-
-You agree not to:
-- misuse the application;
-- attempt to reverse engineer or disrupt the app;
-- use the app in violation of applicable laws.
+By using the application, you agree to this Privacy Policy.
 
 ---
 
-## Data & Privacy
+## Information Stored on Your Device
 
-Trackable is designed to work primarily on-device.
+Chronika primarily stores information locally on your device.
 
-The app does not require account creation.
+This may include:
 
-The app does not sell user data.
+* sessions;
+* activities;
+* subactivities;
+* focus settings;
+* app-control settings;
+* application preferences.
 
-Some optional platform features such as notifications or Live Activities may require system permissions provided by iOS or Android.
-
----
-
-## Availability
-
-The app is provided "as is" without warranties of any kind.
-
-We do not guarantee uninterrupted availability, error-free operation, or compatibility with all devices.
-
-Features may change or be removed at any time.
+This information is used solely to provide application functionality.
 
 ---
 
-## Limitation of Liability
+## Account Information
 
-To the maximum extent permitted by law, Trackable and its developer shall not be liable for:
-- data loss;
-- productivity loss;
-- interruptions;
-- indirect or consequential damages resulting from the use of the app.
+Chronika does not require account creation.
+
+We do not collect:
+
+* names;
+* usernames;
+* passwords;
+* addresses;
+* phone numbers.
+
+---
+
+## Analytics
+
+Chronika may collect anonymous analytics information to improve application performance and user experience.
+
+Analytics events may include:
+
+* screen views;
+* feature usage;
+* onboarding completion;
+* subscription events;
+* application errors and crashes.
+
+Analytics data is not used to personally identify users.
+
+---
+
+## Subscription Information
+
+Subscription purchases are processed by Apple.
+
+We do not receive or store:
+
+* credit card information;
+* banking information;
+* payment credentials.
+
+Apple may provide anonymous purchase status information necessary for subscription validation.
+
+---
+
+## Permissions
+
+Chronika may request access to certain system features, including:
+
+### Screen Time / Family Controls
+
+Used to provide app usage monitoring, app limits, and focus protection features.
+
+### Notifications
+
+Used to deliver reminders, alerts, and productivity-related notifications.
+
+### Live Activities
+
+Used to display ongoing timers and session information on supported devices.
+
+Permissions can be revoked at any time through device settings.
+
+---
+
+## Data Sharing
+
+Chronika does not sell personal information.
+
+Chronika does not share personal information with advertisers.
+
+Anonymous analytics data may be processed by third-party analytics providers solely for improving the application.
+
+---
+
+## Data Retention
+
+Most application data is stored locally on your device.
+
+If analytics services are used, anonymous event data may be retained according to the policies of the respective analytics providers.
+
+---
+
+## Children's Privacy
+
+Chronika is not directed toward children under the age of 13.
+
+We do not knowingly collect personal information from children.
+
+---
+
+## Security
+
+Reasonable measures are taken to protect information processed by the application.
+
+However, no method of storage or transmission can be guaranteed to be completely secure.
+
+---
+
+## Your Rights
+
+Depending on your jurisdiction, you may have rights regarding:
+
+* access to personal information;
+* correction of personal information;
+* deletion of personal information;
+* restriction of processing.
+
+Requests may be sent using the contact information below.
 
 ---
 
 ## Changes
 
-These Terms & Conditions may be updated in the future.
+This Privacy Policy may be updated from time to time.
 
-Continued use of the app after changes means you accept the updated terms.
+Continued use of Chronika after updates constitutes acceptance of the revised Privacy Policy.
 
 ---
 
@@ -67,6 +152,4 @@ Continued use of the app after changes means you accept the updated terms.
 
 Developer: Sergey Kudryashov
 
-For questions regarding these Terms, contact:
-
-j.skudr@gmail.com
+Email: [j.skudr@gmail.com](mailto:j.skudr@gmail.com)

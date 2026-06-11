@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:in_app_review/in_app_review.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:time_tracker/application/paywall/paywall_models.dart';
+import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_visibility_settings.dart';
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
@@ -10,7 +13,8 @@ import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_
 import 'package:time_tracker/features/ios_focus_apps/presentation/screens/focus_apps_settings_screen.dart';
 import 'package:time_tracker/features/social_app_tracking/presentation/screens/social_app_tracking_settings_screen.dart';
 import 'package:time_tracker/presentation/onboarding/onboarding_page.dart';
-import 'package:time_tracker/presentation/paywall/paywall_page.dart';
+import 'package:time_tracker/presentation/utils/premium_gate.dart';
+import 'package:time_tracker/presentation/widgets/premium_badge.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -25,7 +29,10 @@ class _SettingsPageState extends State<SettingsPage> {
       const ActiveSessionVisibilitySettings.defaults();
   DailyRhythmNotificationSettings _rhythmSettings =
       const DailyRhythmNotificationSettings();
+  String _appVersion = '';
   bool _loaded = false;
+  bool _isPremium = false;
+  int _premiumUnlockTapCount = 0;
 
   @override
   void initState() {
@@ -34,14 +41,19 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadSettings() async {
+    final paywallService = context.read<PaywallService>();
     final settings = await ActiveSessionVisibilitySettings.load();
     final rhythmSettings = await DailyRhythmNotificationSettings.load();
+    final packageInfo = await PackageInfo.fromPlatform();
+    final isPremium = await paywallService.hasPremiumAccess();
     if (!mounted) {
       return;
     }
     setState(() {
       _settings = settings;
       _rhythmSettings = rhythmSettings;
+      _appVersion = packageInfo.version;
+      _isPremium = isPremium;
       _loaded = true;
     });
   }
@@ -83,28 +95,34 @@ class _SettingsPageState extends State<SettingsPage> {
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 28, 16, 104),
           children: [
-            Text(
-              'Settings',
-              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.92),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0,
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _handlePremiumUnlockTap,
+              child: Text(
+                'Settings',
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0,
+                    ),
+              ),
+            ),
+            if (!_isPremium) ...[
+              const SizedBox(height: 34),
+              const _SettingsSectionLabel('Premium'),
+              const SizedBox(height: 10),
+              _GlassSettingsPanel(
+                children: [
+                  _AboutSettingTile(
+                    icon: Icons.workspace_premium_rounded,
+                    iconColor: const Color(0xFFF5B84B),
+                    title: 'Unlock Premium',
+                    subtitle: 'Focus, analytics and deeper app control',
+                    onTap: _openPaywall,
                   ),
-            ),
-            const SizedBox(height: 34),
-            const _SettingsSectionLabel('Premium'),
-            const SizedBox(height: 10),
-            _GlassSettingsPanel(
-              children: [
-                _AboutSettingTile(
-                  icon: Icons.workspace_premium_rounded,
-                  iconColor: const Color(0xFFF5B84B),
-                  title: 'Unlock Premium',
-                  subtitle: 'Focus, analytics and deeper app control',
-                  onTap: _openPaywall,
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
             const SizedBox(height: 34),
             const _SettingsSectionLabel('Session Visibility'),
             const SizedBox(height: 10),
@@ -256,6 +274,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     iconColor: const Color(0xFF66D9FF),
                     title: 'App Control',
                     subtitle: 'Screen Time, limits and app blocking',
+                    trailing: _isPremium ? null : const PremiumBadge(),
                     onTap: _openFocusApps,
                   ),
                 ],
@@ -272,6 +291,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     iconColor: const Color(0xFF19D3C5),
                     title: 'Social apps tracking',
                     subtitle: 'Usage Access, limits and soft reminders',
+                    trailing: _isPremium ? null : const PremiumBadge(),
                     onTap: _openSocialTracking,
                   ),
                 ],
@@ -324,7 +344,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 7),
             Text(
-              'Version 1.0.0',
+              _appVersion.isEmpty ? 'Version' : 'Version $_appVersion',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: const Color(0xFFA579FF).withValues(alpha: 0.72),
@@ -349,7 +369,40 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Future<void> _handlePremiumUnlockTap() async {
+    _premiumUnlockTapCount += 1;
+    if (_premiumUnlockTapCount < 10) {
+      if (_premiumUnlockTapCount >= 7 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${10 - _premiumUnlockTapCount} more taps'),
+            duration: const Duration(milliseconds: 650),
+          ),
+        );
+      }
+      return;
+    }
+
+    _premiumUnlockTapCount = 0;
+    await context.read<PaywallService>().enableDebugPremiumOverride();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isPremium = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Premium test mode enabled')),
+    );
+  }
+
   Future<void> _openSocialTracking() async {
+    final allowed = await ensurePremiumAccess(
+      context,
+      feature: PremiumFeature.appControl,
+      source: 'social_app_tracking',
+    );
+    if (!allowed || !mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const SocialAppTrackingSettingsScreen(),
@@ -358,6 +411,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _openFocusApps() async {
+    final allowed = await ensurePremiumAccess(
+      context,
+      feature: PremiumFeature.appControl,
+      source: 'app_control_settings',
+    );
+    if (!allowed || !mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const FocusAppsSettingsScreen(),
@@ -366,11 +427,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _openPaywall() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const PaywallPage(source: 'settings'),
-      ),
+    final unlocked = await openPaywallIfNeeded(
+      context,
+      source: 'settings',
     );
+    if (!mounted || !unlocked) {
+      return;
+    }
+    setState(() => _isPremium = true);
   }
 
   Future<void> _openTelegram() async {
@@ -588,6 +652,7 @@ class _AboutSettingTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   const _AboutSettingTile({
     required this.icon,
@@ -595,6 +660,7 @@ class _AboutSettingTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.trailing,
   });
 
   @override
@@ -637,6 +703,10 @@ class _AboutSettingTile extends StatelessWidget {
                   ],
                 ),
               ),
+              if (trailing != null) ...[
+                const SizedBox(width: 8),
+                trailing!,
+              ],
               Icon(
                 Icons.chevron_right_rounded,
                 color: Colors.white.withValues(alpha: 0.52),

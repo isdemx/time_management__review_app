@@ -10,9 +10,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
+import 'package:time_tracker/application/onboarding/onboarding_service.dart';
 import 'package:time_tracker/features/ios_focus_apps/domain/ios_focus_apps_models.dart';
 import 'package:time_tracker/features/ios_focus_apps/services/ios_focus_apps_settings_service.dart';
 import 'package:time_tracker/features/ios_focus_apps/services/ios_screen_time_service.dart';
+import 'package:time_tracker/presentation/onboarding/onboarding_visual_system.dart';
 
 class AppControlOnboardingStep extends StatefulWidget {
   final VoidCallback onCompleted;
@@ -66,24 +68,21 @@ class _AppControlOnboardingStepState extends State<AppControlOnboardingStep>
           animation: _ambientController,
           builder: (context, _) {
             return DecoratedBox(
-              decoration: const BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0, -0.18),
-                  radius: 1.18,
-                  colors: [
-                    Color(0xFF101A18),
-                    Color(0xFF060B0F),
-                    Color(0xFF020407),
-                  ],
-                ),
-              ),
+              decoration:
+                  const BoxDecoration(gradient: OnboardingGradients.background),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  CustomPaint(
-                    painter: _AppControlAmbientPainter(
-                      progress: _ambientController.value,
-                      intensity: _screenIndex == 0 ? 1.0 : 0.62,
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: _screenIndex == 0 ? 1.0 : 0.24,
+                        duration: const Duration(milliseconds: 360),
+                        child: const ChronikaFlowRibbon(
+                          accent: OnboardingPalette.purple,
+                          active: true,
+                        ),
+                      ),
                     ),
                   ),
                   SafeArea(
@@ -111,7 +110,6 @@ class _AppControlOnboardingStepState extends State<AppControlOnboardingStep>
   Widget _screen() {
     return switch (_screenIndex) {
       0 => _IntroScreen(
-          progress: _ambientController.value,
           onNext: _next,
           onBack: _previous,
         ),
@@ -121,21 +119,17 @@ class _AppControlOnboardingStepState extends State<AppControlOnboardingStep>
           onNext: _continueFromMode,
           onBack: _previous,
         ),
-      2 => _AccessExplainerScreen(
-          onNext: _next,
-          onBack: _previous,
-        ),
-      3 => _ScreenTimeAccessScreen(
+      2 => _ScreenTimeAccessScreen(
           busy: _busy,
           onOpenSettings: _openScreenTimePicker,
           onBack: _previous,
         ),
-      4 => _NotificationsScreen(
+      3 => _NotificationsScreen(
           busy: _busy,
           onAllow: _requestNotifications,
           onBack: _previous,
         ),
-      5 => _DailyLimitScreen(
+      4 => _DailyLimitScreen(
           selectedMinutes: _selectedDailyLimitMinutes,
           onChanged: (minutes) {
             setState(() => _selectedDailyLimitMinutes = minutes);
@@ -189,6 +183,10 @@ class _AppControlOnboardingStepState extends State<AppControlOnboardingStep>
 
   void _previous() {
     if (_busy) return;
+    if (_screenIndex == 3 && _selectedMode == AppControlMode.trackOnly) {
+      setState(() => _screenIndex = 1);
+      return;
+    }
     if (_screenIndex <= 0) {
       widget.onBack();
       return;
@@ -198,9 +196,10 @@ class _AppControlOnboardingStepState extends State<AppControlOnboardingStep>
 
   void _continueFromMode() {
     if (_selectedMode == AppControlMode.trackOnly) {
-      widget.onCompleted();
+      setState(() => _screenIndex = 3);
       return;
     }
+    context.read<OnboardingService>().markAppControlSelected(true);
     _next();
   }
 
@@ -242,7 +241,7 @@ class _AppControlOnboardingStepState extends State<AppControlOnboardingStep>
       }
       setState(() {
         _busy = false;
-        _screenIndex = 4;
+        _screenIndex = 3;
       });
     } catch (_) {
       if (!mounted) return;
@@ -266,6 +265,11 @@ class _AppControlOnboardingStepState extends State<AppControlOnboardingStep>
       }
     }
     if (mounted) {
+      if (_selectedMode == AppControlMode.trackOnly) {
+        await context.read<OnboardingService>().markAppControlSelected(false);
+        widget.onCompleted();
+        return;
+      }
       _next();
     }
   }
@@ -297,64 +301,152 @@ class _AppControlOnboardingStepState extends State<AppControlOnboardingStep>
 }
 
 class _IntroScreen extends StatelessWidget {
-  final double progress;
   final VoidCallback onNext;
   final VoidCallback onBack;
 
   const _IntroScreen({
-    required this.progress,
     required this.onNext,
     required this.onBack,
   });
 
   @override
   Widget build(BuildContext context) {
-    return _FrameScaffold(
-      onBack: onBack,
-      showBack: false,
-      title: 'Ready to take\ncontrol?',
-      subtitle: 'You decide what gets\nyour attention.',
-      body: Expanded(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 250,
-              height: 250,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CustomPaint(
-                    size: const Size.square(250),
-                    painter: _ShieldGlowPainter(progress: progress),
-                  ),
-                  Image.asset(
-                    'assets/shield.png',
-                    width: 154,
-                    height: 154,
-                    fit: BoxFit.contain,
-                  ),
-                ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bottomLift = (constraints.maxHeight * 0.16).clamp(88.0, 132.0);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(width: 36, height: 36),
               ),
+              const SizedBox(height: 58),
+              const _GradientTimeTitle(),
+              Expanded(
+                child: Center(
+                  child: Transform.translate(
+                    offset: const Offset(0, -10),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ControlBullet(
+                          icon: Icons.schedule_rounded,
+                          text: 'Track what matters.',
+                          color: OnboardingPalette.electricBlue,
+                        ),
+                        SizedBox(height: 18),
+                        _ControlBullet(
+                          icon: Icons.center_focus_strong_rounded,
+                          text: 'Stay focused.',
+                          color: OnboardingPalette.purple,
+                        ),
+                        SizedBox(height: 18),
+                        _ControlBullet(
+                          icon: Icons.auto_graph_rounded,
+                          text: 'Spend your time intentionally.',
+                          color: OnboardingPalette.pink,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              _GoldButton(
+                label: 'Continue',
+                onPressed: onNext,
+              ),
+              SizedBox(height: bottomLift),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ControlBullet extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  const _ControlBullet({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 306,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 34,
+            child: Align(
+              alignment: Alignment.center,
+              child: Icon(icon, color: color, size: 21),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Want to control\nyour apps?',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFFEDE8DD),
-                fontSize: 20,
-                height: 1.28,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: OnboardingPalette.text,
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GradientTimeTitle extends StatelessWidget {
+  const _GradientTimeTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    const baseStyle = TextStyle(
+      color: Colors.white,
+      fontSize: 35,
+      height: 1.12,
+      letterSpacing: 0,
+      fontWeight: FontWeight.w900,
+    );
+    return Column(
+      children: [
+        const Text(
+          'Take control',
+          textAlign: TextAlign.center,
+          style: baseStyle,
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('of ', style: baseStyle),
+            ShaderMask(
+              blendMode: BlendMode.srcIn,
+              shaderCallback: (bounds) {
+                return const LinearGradient(
+                  colors: [
+                    OnboardingPalette.electricBlue,
+                    OnboardingPalette.purple,
+                    OnboardingPalette.pink,
+                  ],
+                ).createShader(bounds);
+              },
+              child: const Text('your time.', style: baseStyle),
+            ),
           ],
         ),
-      ),
-      button: _GoldButton(
-        label: 'Yes, I want to',
-        onPressed: onNext,
-      ),
+      ],
     );
   }
 }
@@ -421,59 +513,6 @@ class _ModeScreen extends StatelessWidget {
   }
 }
 
-class _AccessExplainerScreen extends StatelessWidget {
-  final VoidCallback onNext;
-  final VoidCallback onBack;
-
-  const _AccessExplainerScreen({
-    required this.onNext,
-    required this.onBack,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _FrameScaffold(
-      onBack: onBack,
-      title: 'To control your apps,\nwe need access.',
-      subtitle: "We'll guide you through\nthe setup.",
-      body: const Expanded(
-        child: Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _BellGlow(),
-              SizedBox(width: 24),
-              Flexible(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _AccessItem(
-                      icon: Icons.shield_rounded,
-                      title: 'Screen Time\nAccess',
-                      subtitle: 'Required to limit\napps & time',
-                    ),
-                    SizedBox(height: 28),
-                    _AccessItem(
-                      icon: Icons.notifications_rounded,
-                      title: 'Notifications',
-                      subtitle: 'Optional to send\ntimely reminders',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      button: _GoldButton(
-        label: 'Continue',
-        onPressed: onNext,
-      ),
-    );
-  }
-}
-
 class _ScreenTimeAccessScreen extends StatelessWidget {
   final bool busy;
   final VoidCallback onOpenSettings;
@@ -489,8 +528,8 @@ class _ScreenTimeAccessScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _FrameScaffold(
       onBack: onBack,
-      title: 'First, allow\nScreen Time access.',
-      subtitle: 'It lets Chronika limit apps\nand track your time.',
+      title: 'Allow Screen\nTime Access',
+      subtitle: 'Required to block apps\nand enforce limits.',
       body: Expanded(
         child: Center(
           child: Column(
@@ -540,14 +579,14 @@ class _NotificationsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _FrameScaffold(
       onBack: onBack,
-      title: 'Next, allow\nnotifications.',
-      subtitle: 'So we can remind you\nwhen it matters.',
+      title: 'Allow\nNotifications',
+      subtitle: "We'll let you know\nwhen limits are reached.",
       body: Expanded(
         child: Center(
           child: _SystemPromptMock(
             title: '"Chronika" Would Like\nto Send You\nNotifications',
             body:
-                'Notifications may include alerts,\nsounds, and icon badges. These\ncan be configured in Settings.',
+                'Notifications can include focus\ntimer alerts, daily reflections,\nand app limit reminders.',
             left: "Don't Allow",
             right: 'Allow',
             large: true,
@@ -631,8 +670,8 @@ class _FinalScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _FrameScaffold(
       onBack: onBack,
-      title: "That's it!",
-      subtitle: "You're all set to take\ncontrol of your time.",
+      title: "You're ready.",
+      subtitle: 'Your limits are active.',
       body: Expanded(
         child: Center(
           child: Column(
@@ -663,20 +702,21 @@ class _FinalScreen extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Color(0xFFFFC25D),
-                            Color(0xFFE1972F),
+                            OnboardingPalette.electricBlue,
+                            OnboardingPalette.purple,
                           ],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFE8A638).withOpacity(0.34),
+                            color: OnboardingPalette.electricBlue
+                                .withOpacity(0.32),
                             blurRadius: 24,
                           ),
                         ],
                       ),
                       child: const Icon(
                         Icons.check_rounded,
-                        color: Color(0xFF2B1808),
+                        color: Colors.white,
                         size: 36,
                         weight: 900,
                       ),
@@ -706,7 +746,6 @@ class _FinalScreen extends StatelessWidget {
 
 class _FrameScaffold extends StatelessWidget {
   final VoidCallback? onBack;
-  final bool showBack;
   final String title;
   final String subtitle;
   final Widget body;
@@ -718,7 +757,6 @@ class _FrameScaffold extends StatelessWidget {
     required this.subtitle,
     required this.body,
     required this.button,
-    this.showBack = true,
   });
 
   @override
@@ -730,9 +768,7 @@ class _FrameScaffold extends StatelessWidget {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: showBack
-                ? _BackCircle(onPressed: onBack)
-                : const SizedBox(width: 36, height: 36),
+            child: _BackCircle(onPressed: onBack),
           ),
           const SizedBox(height: 26),
           Text(
@@ -746,18 +782,20 @@ class _FrameScaffold extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 14),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFFA6A9AE),
-              fontSize: 16,
-              height: 1.38,
-              letterSpacing: 0,
-              fontWeight: FontWeight.w700,
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFFA6A9AE),
+                fontSize: 16,
+                height: 1.38,
+                letterSpacing: 0,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
+          ],
           body,
           button,
         ],
@@ -798,55 +836,7 @@ class _GoldButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 58,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          gradient: onPressed == null
-              ? null
-              : const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFFFFC25D),
-                    Color(0xFFE1972F),
-                    Color(0xFFC87716),
-                  ],
-                ),
-          color: onPressed == null ? const Color(0xFF262626) : null,
-          boxShadow: onPressed == null
-              ? null
-              : [
-                  BoxShadow(
-                    color: const Color(0xFFE49A2F).withOpacity(0.28),
-                    blurRadius: 24,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: onPressed,
-            child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: onPressed == null
-                      ? const Color(0xFF8D8D8D)
-                      : const Color(0xFF18110A),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    return OnboardingPrimaryButton(label: label, onPressed: onPressed);
   }
 }
 
@@ -879,19 +869,19 @@ class _ModeCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF2B2116).withOpacity(0.88)
-              : const Color(0xFF0C1418).withOpacity(0.80),
+              ? const Color(0xFF121A45).withOpacity(0.90)
+              : const Color(0xFF081022).withOpacity(0.78),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: selected
-                ? const Color(0xFFE7A43C)
+                ? OnboardingPalette.purple
                 : Colors.white.withOpacity(0.06),
             width: selected ? 1.4 : 1,
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: const Color(0xFFE6A039).withOpacity(0.16),
+                    color: OnboardingPalette.purple.withOpacity(0.20),
                     blurRadius: 18,
                   ),
                 ]
@@ -904,9 +894,10 @@ class _ModeCard extends StatelessWidget {
               height: 46,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFFE9A63D).withOpacity(0.18),
+                color: OnboardingPalette.electricBlue.withOpacity(0.16),
               ),
-              child: Icon(icon, color: const Color(0xFFE8A638), size: 22),
+              child:
+                  Icon(icon, color: OnboardingPalette.electricBlue, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -939,7 +930,7 @@ class _ModeCard extends StatelessWidget {
               opacity: selected ? 1 : 0,
               child: const Icon(
                 Icons.check_circle_rounded,
-                color: Color(0xFFE8A638),
+                color: OnboardingPalette.purple,
               ),
             ),
           ],
@@ -973,19 +964,19 @@ class _LimitOption extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF2B2116).withOpacity(0.86)
-              : const Color(0xFF0C1418).withOpacity(0.76),
+              ? const Color(0xFF121A45).withOpacity(0.88)
+              : const Color(0xFF081022).withOpacity(0.76),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: selected
-                ? const Color(0xFFFFD43F)
+                ? OnboardingPalette.electricBlue
                 : Colors.white.withOpacity(0.11),
             width: selected ? 1.45 : 1,
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: const Color(0xFFE8A638).withOpacity(0.18),
+                    color: OnboardingPalette.electricBlue.withOpacity(0.22),
                     blurRadius: 24,
                     offset: const Offset(0, 10),
                   ),
@@ -1003,14 +994,14 @@ class _LimitOption extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: selected
-                      ? const Color(0xFFFFD43F)
+                      ? OnboardingPalette.electricBlue
                       : const Color(0xFFA4A4A4),
                   width: selected ? 2.2 : 1.7,
                 ),
                 boxShadow: selected
                     ? [
                         BoxShadow(
-                          color: const Color(0xFFE8A638).withOpacity(0.30),
+                          color: OnboardingPalette.purple.withOpacity(0.26),
                           blurRadius: 18,
                         ),
                       ]
@@ -1020,8 +1011,9 @@ class _LimitOption extends StatelessWidget {
                 duration: const Duration(milliseconds: 220),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color:
-                      selected ? const Color(0xFFFFC253) : Colors.transparent,
+                  color: selected
+                      ? OnboardingPalette.electricBlue
+                      : Colors.transparent,
                 ),
               ),
             ),
@@ -1062,11 +1054,11 @@ class _FinalPoint extends StatelessWidget {
           height: 42,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFFE9A63D).withOpacity(0.15),
+            color: OnboardingPalette.electricBlue.withOpacity(0.14),
           ),
           child: const Icon(
             Icons.notifications_rounded,
-            color: Color(0xFFE8A638),
+            color: OnboardingPalette.electricBlue,
             size: 20,
           ),
         ),
@@ -1081,122 +1073,6 @@ class _FinalPoint extends StatelessWidget {
               height: 1.25,
               fontWeight: FontWeight.w800,
             ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BellGlow extends StatefulWidget {
-  const _BellGlow();
-
-  @override
-  State<_BellGlow> createState() => _BellGlowState();
-}
-
-class _BellGlowState extends State<_BellGlow>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        final value = Curves.easeInOut.transform(_controller.value);
-        return Transform.rotate(
-          angle: math.sin(value * math.pi * 2) * 0.035,
-          child: Container(
-            width: 112,
-            height: 112,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color:
-                      const Color(0xFFEAA13A).withOpacity(0.22 + value * 0.16),
-                  blurRadius: 34 + value * 18,
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.notifications_rounded,
-              size: 92,
-              color: Color(0xFFF1A83C),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AccessItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  const _AccessItem({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFFE9A63D).withOpacity(0.16),
-          ),
-          child: Icon(icon, size: 17, color: const Color(0xFFE8A638)),
-        ),
-        const SizedBox(width: 12),
-        Flexible(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Color(0xFFEFEDE9),
-                  fontSize: 15,
-                  height: 1.18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  color: Color(0xFF8B9094),
-                  fontSize: 13,
-                  height: 1.24,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
           ),
         ),
       ],
@@ -1322,60 +1198,6 @@ class _SystemPromptMock extends StatelessWidget {
   }
 }
 
-class _AppControlAmbientPainter extends CustomPainter {
-  final double progress;
-  final double intensity;
-
-  const _AppControlAmbientPainter({
-    required this.progress,
-    required this.intensity,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width * 0.5, size.height * 0.52);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1
-      ..color = const Color(0xFFE59B2D).withOpacity(0.08 * intensity);
-
-    for (var i = 0; i < 7; i++) {
-      final radius = size.width * (0.28 + i * 0.09);
-      final wobble = math.sin(progress * math.pi * 2 + i) * 14;
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: center.translate(wobble, i * 18.0 - 50),
-          width: radius * 1.7,
-          height: radius * 0.42,
-        ),
-        paint,
-      );
-    }
-
-    final dotPaint = Paint()..style = PaintingStyle.fill;
-    for (var i = 0; i < 42; i++) {
-      final seed = i * 19.73;
-      final angle = seed + progress * math.pi * 2 * (0.25 + (i % 4) * 0.08);
-      final rx = size.width * (0.16 + (i % 9) * 0.035);
-      final ry = size.height * (0.07 + (i % 7) * 0.014);
-      final pos = Offset(
-        center.dx + math.cos(angle) * rx,
-        center.dy + math.sin(angle * 1.4) * ry - 48 + (i % 5) * 18,
-      );
-      final pulse = 0.35 + 0.65 * math.sin(angle * 1.7).abs();
-      dotPaint.color =
-          const Color(0xFFFFB23D).withOpacity(0.05 * intensity + pulse * 0.11);
-      canvas.drawCircle(pos, 1.2 + pulse * 2.2, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _AppControlAmbientPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.intensity != intensity;
-  }
-}
-
 class _ShieldGlowPainter extends CustomPainter {
   final double progress;
 
@@ -1387,8 +1209,8 @@ class _ShieldGlowPainter extends CustomPainter {
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          const Color(0xFFFFBE4F).withOpacity(0.38),
-          const Color(0xFFE79325).withOpacity(0.13),
+          OnboardingPalette.electricBlue.withOpacity(0.30),
+          OnboardingPalette.purple.withOpacity(0.16),
           Colors.transparent,
         ],
       ).createShader(Rect.fromCircle(center: center, radius: size.width * 0.5));
@@ -1397,7 +1219,7 @@ class _ShieldGlowPainter extends CustomPainter {
     final orbitPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2
-      ..color = const Color(0xFFE89F33).withOpacity(0.20);
+      ..color = OnboardingPalette.purple.withOpacity(0.20);
     for (var i = 0; i < 4; i++) {
       final wobble = math.sin(progress * math.pi * 2 + i) * 10;
       canvas.drawOval(
@@ -1417,7 +1239,12 @@ class _ShieldGlowPainter extends CustomPainter {
       final pos = center +
           Offset(math.cos(angle) * radius, math.sin(angle) * radius * 0.5);
       final alpha = 0.20 + 0.42 * math.sin(angle * 1.9).abs();
-      sparkPaint.color = const Color(0xFFFFC05A).withOpacity(alpha);
+      sparkPaint.color = Color.lerp(
+        OnboardingPalette.electricBlue,
+        OnboardingPalette.pink,
+        math.sin(angle).abs(),
+      )!
+          .withOpacity(alpha);
       canvas.drawCircle(pos, 1.2 + alpha * 3.0, sparkPaint);
     }
   }

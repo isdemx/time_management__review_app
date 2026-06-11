@@ -5,7 +5,6 @@ import 'package:time_tracker/domain/entities/trackable.dart';
 import 'package:time_tracker/domain/entities/trackable_mode.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
 import 'package:time_tracker/presentation/blocs/session_detail/session_detail_bloc.dart';
-import 'package:time_tracker/presentation/widgets/trackable_button.dart';
 import 'package:uuid/uuid.dart';
 
 class TrackablePickerSheet extends StatefulWidget {
@@ -144,29 +143,18 @@ class _TrackablePickerSheetState extends State<TrackablePickerSheet> {
                     );
                   }
 
-                  return ListView.separated(
+                  return ListView.builder(
                     shrinkWrap: true,
                     itemCount: data.trackables.length,
-                    separatorBuilder: (_, __) => Divider(
-                      height: 1,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.08),
-                    ),
+                    padding: const EdgeInsets.fromLTRB(14, 2, 14, 10),
                     itemBuilder: (context, index) {
                       final trackable = data.trackables[index];
                       final modes = data.modesByTrackable[trackable.id] ?? [];
-
-                      return TrackableButton(
+                      final defaultMode = _defaultModeFor(trackable, modes);
+                      return _TrackablePickerRow(
                         trackable: trackable,
                         modes: modes,
-                        duration: Duration.zero,
-                        isActive: false,
-                        showTimer: false,
-                        animated: false,
-                        activeModeId: null,
-                        onModeTap: (modeId) => _select(trackable.id, modeId),
+                        onTap: () => _select(trackable.id, defaultMode.id),
                       );
                     },
                   );
@@ -417,6 +405,248 @@ class _TrackablePickerSheetState extends State<TrackablePickerSheet> {
           ),
         );
     Navigator.of(context).pop();
+  }
+
+  TrackableMode _defaultModeFor(
+    Trackable trackable,
+    List<TrackableMode> modes,
+  ) {
+    if (modes.isEmpty) {
+      return TrackableMode(
+        id: '',
+        trackableId: trackable.id,
+        name: TrackableMode.mainName,
+        sortOrder: 0,
+        createdAt: trackable.createdAt,
+        updatedAt: trackable.updatedAt,
+      );
+    }
+    return modes.firstWhere((mode) => mode.isMain, orElse: () => modes.first);
+  }
+}
+
+class _TrackablePickerRow extends StatelessWidget {
+  final Trackable trackable;
+  final List<TrackableMode> modes;
+  final VoidCallback onTap;
+
+  const _TrackablePickerRow({
+    required this.trackable,
+    required this.modes,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = ColorUtils.fromHex(trackable.color);
+    final subtitle = _subtitleForModes(modes);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: const Color(0xFF111821).withValues(alpha: 0.78),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.075),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.045),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+              child: Row(
+                children: [
+                  _TrackablePickerIcon(
+                    color: accent,
+                    icon: _iconForTrackable(trackable.name, modes),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          trackable.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.94),
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.2,
+                                  ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.62),
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.1,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white.withValues(alpha: 0.66),
+                    size: 34,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _subtitleForModes(List<TrackableMode> modes) {
+    final names = modes
+        .where((mode) => !mode.isMain && !mode.isArchived)
+        .map((mode) => mode.name.trim())
+        .where((name) => name.isNotEmpty)
+        .take(5)
+        .toList();
+    if (names.isEmpty) {
+      return TrackableMode.mainName;
+    }
+    return names.join('  •  ');
+  }
+
+  IconData _iconForTrackable(String name, List<TrackableMode> modes) {
+    final haystack = [
+      name,
+      ...modes.map((mode) => mode.name),
+    ].join(' ').toLowerCase();
+    if (haystack.contains('break') ||
+        haystack.contains('coffee') ||
+        haystack.contains('tea')) {
+      return Icons.local_cafe_rounded;
+    }
+    if (haystack.contains('work') ||
+        haystack.contains('coding') ||
+        haystack.contains('code') ||
+        haystack.contains('debug')) {
+      return Icons.code_rounded;
+    }
+    if (haystack.contains('learn') ||
+        haystack.contains('study') ||
+        haystack.contains('docs') ||
+        haystack.contains('course')) {
+      return Icons.description_rounded;
+    }
+    if (haystack.contains('idle') ||
+        haystack.contains('random') ||
+        haystack.contains('wait')) {
+      return Icons.trip_origin_rounded;
+    }
+    if (haystack.contains('health') ||
+        haystack.contains('training') ||
+        haystack.contains('workout') ||
+        haystack.contains('walk') ||
+        haystack.contains('yoga')) {
+      return Icons.fitness_center_rounded;
+    }
+    if (haystack.contains('sleep') ||
+        haystack.contains('rest') ||
+        haystack.contains('nap')) {
+      return Icons.bed_rounded;
+    }
+    if (haystack.contains('family') ||
+        haystack.contains('friend') ||
+        haystack.contains('social')) {
+      return Icons.groups_rounded;
+    }
+    if (haystack.contains('shopping') ||
+        haystack.contains('errand') ||
+        haystack.contains('chores')) {
+      return Icons.shopping_cart_rounded;
+    }
+    return Icons.auto_awesome_rounded;
+  }
+}
+
+class _TrackablePickerIcon extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+
+  const _TrackablePickerIcon({
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = ColorUtils.darken(color, 0.46);
+    final bright = ColorUtils.lighten(color, 0.18);
+    return Container(
+      width: 58,
+      height: 58,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            bright.withValues(alpha: 0.40),
+            color.withValues(alpha: 0.28),
+            dark.withValues(alpha: 0.64),
+          ],
+        ),
+        border: Border.all(color: bright.withValues(alpha: 0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.22),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withValues(alpha: 0.18),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.26),
+                  blurRadius: 16,
+                ),
+              ],
+            ),
+          ),
+          Icon(icon, color: bright, size: 29),
+        ],
+      ),
+    );
   }
 }
 

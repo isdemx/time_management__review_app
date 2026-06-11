@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:time_tracker/application/paywall/paywall_models.dart';
+import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_models.dart';
 import 'package:time_tracker/application/active_session_bar/active_session_bar_service.dart';
 import 'package:time_tracker/application/daily_rhythm/daily_rhythm_notification_service.dart';
@@ -17,9 +19,9 @@ import 'package:time_tracker/domain/repositories/session_v2_repository.dart';
 import 'package:time_tracker/domain/repositories/timeline_repository.dart';
 import 'package:time_tracker/domain/repositories/trackable_repository.dart';
 import 'package:time_tracker/presentation/blocs/session_detail/session_detail_bloc.dart';
-import 'package:time_tracker/presentation/pages/daily_rhythm/evening_reflection_page.dart';
 import 'package:time_tracker/presentation/pages/daily_rhythm/focus_mode_page.dart';
 import 'package:time_tracker/presentation/theme/chronika_theme.dart';
+import 'package:time_tracker/presentation/utils/premium_gate.dart';
 import 'package:time_tracker/presentation/utils/time_format_util.dart';
 import 'package:time_tracker/presentation/widgets/trackable_button.dart';
 import 'package:time_tracker/presentation/widgets/trackable_picker_sheet.dart';
@@ -94,6 +96,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
   bool _initialModeSwitchConsumed = false;
   bool _initialPauseConsumed = false;
   bool _keepScreenOn = false;
+  bool _isPremium = false;
   String? _lastActivityEntryTrackableId;
 
   @override
@@ -103,6 +106,15 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       _clock.value = DateTime.now();
     });
+    _loadPremiumStatus();
+  }
+
+  Future<void> _loadPremiumStatus() async {
+    final isPremium = await context.read<PaywallService>().hasPremiumAccess();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isPremium = isPremium);
   }
 
   @override
@@ -142,12 +154,6 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
                 initiallyEditing: widget.startEditingTitle,
               ),
               actions: [
-                if (!isFinished)
-                  IconButton(
-                    onPressed: () => _openEveningReflection(context, state),
-                    icon: const Icon(Icons.check_circle_outline_rounded),
-                    tooltip: 'Close Day',
-                  ),
                 IconButton(
                   onPressed: () => _showSessionEvents(context, state),
                   icon: const Icon(Icons.history),
@@ -187,6 +193,7 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
                         child: _SessionTrackablesList(
                           state: state,
                           clock: _clock,
+                          showPremiumBadge: !_isPremium,
                           onLongPressStart: _startTrackableSlider,
                           onLongPressMove: (position) =>
                               _moveTrackableSlider(position, state),
@@ -722,6 +729,17 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
     Trackable trackable,
   ) async {
     _closeTrackableSlider();
+    final allowed = await ensurePremiumAccess(
+      context,
+      feature: PremiumFeature.focusMode,
+      source: 'focus_mode_session',
+    );
+    if (!allowed || !context.mounted) {
+      return;
+    }
+    if (!_isPremium) {
+      setState(() => _isPremium = true);
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => FocusModePage(
@@ -785,32 +803,6 @@ class _SessionDetailViewState extends State<_SessionDetailView> {
       ),
     );
     await notificationService.refreshDailyNudges();
-  }
-
-  Future<void> _openEveningReflection(
-    BuildContext context,
-    SessionDetailLoaded state,
-  ) async {
-    final repository = context.read<DailyRhythmRepository>();
-    final daySession = await repository.getDaySession(state.session.id);
-    if (!context.mounted) return;
-    if (daySession == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Start Day first to close a day.')),
-      );
-      return;
-    }
-    final closed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => EveningReflectionPage(daySession: daySession),
-      ),
-    );
-    if (closed == true && context.mounted) {
-      context.read<SessionDetailBloc>().add(const SessionDetailFinished());
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Day closed.')),
-      );
-    }
   }
 
   void _tapTrackableSlider(
@@ -4059,10 +4051,12 @@ class _SessionTrackablesList extends StatelessWidget {
   final void Function(String trackableId, String modeId, Offset globalPosition)
       onMenuTap;
   final ValueChanged<Trackable> onFocusTap;
+  final bool showPremiumBadge;
 
   const _SessionTrackablesList({
     required this.state,
     required this.clock,
+    required this.showPremiumBadge,
     required this.onLongPressStart,
     required this.onLongPressMove,
     required this.onLongPressEnd,
@@ -4099,6 +4093,7 @@ class _SessionTrackablesList extends StatelessWidget {
           state: state,
           trackable: trackable,
           isActive: isActive,
+          showPremiumBadge: showPremiumBadge,
           onModeTap: (modeId) {
             _selectTrackable(context, trackable.id, modeId);
           },
@@ -4159,6 +4154,7 @@ class _TrackableButtonWithLiveTimer extends StatefulWidget {
   final ValueChanged<Offset> onLongPressEnd;
   final void Function(String modeId, Offset globalPosition) onMenuTap;
   final VoidCallback? onFocusTap;
+  final bool showPremiumBadge;
 
   const _TrackableButtonWithLiveTimer({
     super.key,
@@ -4166,6 +4162,7 @@ class _TrackableButtonWithLiveTimer extends StatefulWidget {
     required this.state,
     required this.trackable,
     required this.isActive,
+    required this.showPremiumBadge,
     required this.onModeTap,
     required this.onLongPressStart,
     required this.onLongPressMove,
@@ -4230,6 +4227,7 @@ class _TrackableButtonWithLiveTimerState
       },
       onModeMenuTap: widget.onMenuTap,
       onFocusTap: widget.onFocusTap,
+      showPremiumBadge: widget.showPremiumBadge,
     );
   }
 

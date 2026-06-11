@@ -6,11 +6,17 @@ import 'package:flutter/material.dart';
 class DayVisualizedOnboardingStep extends StatefulWidget {
   final VoidCallback onCompleted;
   final VoidCallback? onBack;
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
 
   const DayVisualizedOnboardingStep({
     super.key,
     required this.onCompleted,
     this.onBack,
+    this.title = 'Your day,\nvisualized.',
+    this.subtitle = 'A quiet look at where\ntime goes.',
+    this.buttonLabel = 'Next',
   });
 
   @override
@@ -105,7 +111,10 @@ class _DayVisualizedOnboardingStepState
                 ),
               ),
               const SizedBox(height: 16),
-              const _VisualizedCopy(),
+              _VisualizedCopy(
+                title: widget.title,
+                subtitle: widget.subtitle,
+              ),
               const SizedBox(height: 4),
               Expanded(
                 flex: 8,
@@ -137,7 +146,10 @@ class _DayVisualizedOnboardingStepState
                   );
                 },
               ),
-              _ShowMineButton(onPressed: widget.onCompleted),
+              _ShowMineButton(
+                label: widget.buttonLabel,
+                onPressed: widget.onCompleted,
+              ),
             ],
           ),
         ),
@@ -168,16 +180,22 @@ class _BackCircle extends StatelessWidget {
 }
 
 class _VisualizedCopy extends StatelessWidget {
-  const _VisualizedCopy();
+  final String title;
+  final String subtitle;
+
+  const _VisualizedCopy({
+    required this.title,
+    required this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Text(
-          'Your day,\nvisualized.',
+        Text(
+          title,
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 33,
             height: 1.12,
@@ -187,7 +205,7 @@ class _VisualizedCopy extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         Text(
-          'A quiet look at where\ntime goes.',
+          subtitle,
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.58),
@@ -443,9 +461,13 @@ class _DayLegendRow extends StatelessWidget {
 }
 
 class _ShowMineButton extends StatelessWidget {
+  final String label;
   final VoidCallback onPressed;
 
-  const _ShowMineButton({required this.onPressed});
+  const _ShowMineButton({
+    required this.label,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -482,10 +504,10 @@ class _ShowMineButton extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.20),
                 ),
               ),
-              child: const Center(
+              child: Center(
                 child: Text(
-                  'Next',
-                  style: TextStyle(
+                  label,
+                  style: const TextStyle(
                     color: Color(0xFF120A02),
                     fontSize: 19,
                     fontWeight: FontWeight.w900,

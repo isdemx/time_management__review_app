@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension-primary.dia",
+    "emit-module-dependencies" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension-primary-emit-module.dia",
+    "pch" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension-primary.swiftdeps"
+  },
+  "/Users/sergeykudryashov/Development/time_management__review_app/ios/ChronikaLiveActivityExtension/ChronikaLiveActivityExtension.swift" : {
+    "const-values" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension.swiftconstvalues",
+    "dependencies" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension.d",
+    "diagnostics" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension.dia",
+    "index-unit-output-path" : "/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension.o",
+    "llvm-bc" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension.bc",
+    "object" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension.o",
+    "swift-dependencies" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension.swiftdeps",
+    "swiftmodule" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityExtension~partial.swiftmodule"
+  },
+  "/Users/sergeykudryashov/Development/time_management__review_app/ios/ChronikaLiveActivityExtension/ChronikaLiveActivityIntents.swift" : {
+    "const-values" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityIntents.swiftconstvalues",
+    "dependencies" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityIntents.d",
+    "diagnostics" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityIntents.dia",
+    "index-unit-output-path" : "/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityIntents.o",
+    "llvm-bc" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityIntents.bc",
+    "object" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityIntents.o",
+    "swift-dependencies" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityIntents.swiftdeps",
+    "swiftmodule" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityIntents~partial.swiftmodule"
+  },
+  "/Users/sergeykudryashov/Development/time_management__review_app/ios/ChronikaLiveActivityExtension/ChronikaLiveActivityShared.swift" : {
+    "const-values" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityShared.swiftconstvalues",
+    "dependencies" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityShared.d",
+    "diagnostics" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityShared.dia",
+    "index-unit-output-path" : "/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityShared.o",
+    "llvm-bc" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityShared.bc",
+    "object" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityShared.o",
+    "swift-dependencies" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityShared.swiftdeps",
+    "swiftmodule" : "/Users/sergeykudryashov/Development/time_management__review_app/ios/build/Runner.build/Debug-iphoneos/ChronikaLiveActivityExtension.build/Objects-normal/arm64/ChronikaLiveActivityShared~partial.swiftmodule"
+  }
+}
