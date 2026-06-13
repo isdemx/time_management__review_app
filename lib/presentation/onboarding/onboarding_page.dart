@@ -9,7 +9,6 @@ import 'package:time_tracker/application/onboarding/onboarding_service.dart';
 import 'package:time_tracker/application/paywall/paywall_service.dart';
 import 'package:time_tracker/presentation/onboarding/attention_final_onboarding_step.dart';
 import 'package:time_tracker/presentation/onboarding/app_control_onboarding_step.dart';
-import 'package:time_tracker/presentation/onboarding/att_pre_prompt_page.dart';
 import 'package:time_tracker/presentation/onboarding/control_orb_onboarding_step.dart';
 import 'package:time_tracker/presentation/onboarding/day_visualized_onboarding_step.dart';
 import 'package:time_tracker/presentation/onboarding/session_value_onboarding_step.dart';
@@ -178,21 +177,11 @@ class _OnboardingView extends StatelessWidget {
       return;
     }
 
-    final service = context.read<OnboardingService>();
-    final showAtt = await service.shouldShowAttPrompt();
-    if (!context.mounted) {
-      return;
-    }
-
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => showAtt
-            ? AttPrePromptPage(
-                onCompleted: () => _completeAfterPermissions(context),
-              )
-            : _OnboardingCompletePage(
-                onCompleted: () => _completeAfterPermissions(context),
-              ),
+        builder: (_) => _OnboardingCompletePage(
+          onCompleted: () => _completeAfterPermissions(context),
+        ),
       ),
     );
   }

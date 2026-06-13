@@ -53,7 +53,6 @@ dependencies:
   url_launcher: ^6.3.2
   in_app_review: ^2.0.12
   package_info_plus: ^10.1.0
-  app_tracking_transparency: ^2.0.6
   apphud: ^2.3.0
   appsflyer_sdk: ^6.15.2
   amplitude_flutter: ^4.0.0
